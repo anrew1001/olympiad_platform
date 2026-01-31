@@ -28,3 +28,18 @@ class User(Base):
 
     # Хеш пароля пользователя (не хранится в открытом виде)
     hashed_password: Mapped[str] = mapped_column(nullable=False)
+
+    # Рейтинг пользователя на платформе (по умолчанию 1000)
+    rating: Mapped[int] = mapped_column(
+        default=1000,
+        server_default="1000",
+        nullable=False
+    )
+
+    # Роль пользователя (user, admin, moderator)
+    role: Mapped[str] = mapped_column(
+        default="user",
+        server_default="user",
+        index=True,
+        nullable=False
+    )
