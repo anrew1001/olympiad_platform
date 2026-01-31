@@ -7,6 +7,7 @@
 ### Python 3.12
 
 **Windows:**
+
 1. Открой https://www.python.org/downloads/
 2. Нажми "Download Python 3.12.x"
 3. Запусти установщик
