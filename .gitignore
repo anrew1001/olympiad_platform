@@ -49,3 +49,4 @@ CLAUDE.md
 # Postgres (future use with volume mapping)
 postgres_data/*
 !postgres_data/.gitkeep
+.claude/settings.json
