@@ -6,8 +6,9 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import Task
-from app.schemas.task import TaskInList, TaskDetail, PaginatedTaskResponse
+from app.models import Task, User
+from app.schemas.task import TaskInList, TaskDetail, PaginatedTaskResponse, TaskCheckRequest, TaskCheckResponse
+from app.routers.auth import get_current_user
 
 
 # API роутер для работы с задачами
@@ -138,3 +139,82 @@ async def get_task(
     # FastAPI автоматически сериализует через TaskDetail
     # (без поля answer, т.к. оно не определено в схеме)
     return task
+
+
+@router.post(
+    "/{task_id}/check",
+    response_model=TaskCheckResponse,
+    summary="Проверить ответ на задачу",
+    description=(
+        "Проверяет правильность ответа пользователя на задачу. "
+        "Требует авторизации через JWT токен. "
+        "При правильном ответе возвращает подтверждение. "
+        "При неправильном ответе возвращает правильный ответ."
+    )
+)
+async def check_task_answer(
+    task_id: int,
+    check_data: TaskCheckRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+) -> TaskCheckResponse:
+    """
+    Проверка ответа пользователя на задачу.
+
+    Args:
+        task_id: ID задачи для проверки
+        check_data: Данные с ответом пользователя
+        current_user: Текущий авторизованный пользователь (из JWT токена)
+        db: Асинхронная сессия БД
+
+    Returns:
+        TaskCheckResponse: Результат проверки с сообщением и опционально правильным ответом
+
+    Raises:
+        HTTPException 404: Если задача с указанным ID не найдена
+        HTTPException 401: Если пользователь не авторизован (обрабатывается в get_current_user)
+
+    Примечание безопасности:
+        - Эндпоинт защищён JWT аутентификацией через get_current_user dependency
+        - Правильный ответ возвращается ТОЛЬКО при неверном ответе пользователя
+        - Сравнение ответов case-insensitive с удалением пробельных символов
+    """
+
+    # === 1. Получение задачи из БД ===
+    query = select(Task).where(Task.id == task_id)
+    result = await db.execute(query)
+    task = result.scalar_one_or_none()
+
+    # Обработка случая, когда задача не найдена
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Задача с ID {task_id} не найдена"
+        )
+
+    # === 2. Нормализация ответов для сравнения ===
+    # Приводим оба ответа к нижнему регистру и убираем пробелы по краям
+    # Это позволяет игнорировать различия в регистре и лишние пробелы
+    user_answer = check_data.answer.strip().lower()
+    correct_answer = task.answer.strip().lower()
+
+    # === 3. Проверка правильности ответа ===
+    is_correct = (user_answer == correct_answer)
+
+    # === 4. Формирование ответа ===
+    if is_correct:
+        # Правильный ответ - НЕ раскрываем правильный ответ
+        return TaskCheckResponse(
+            is_correct=True,
+            message="Верно!",
+            correct_answer=None
+        )
+    else:
+        # Неправильный ответ - показываем правильный ответ
+        # ВАЖНО: используем оригинальный task.answer (не нормализованный),
+        # чтобы показать ответ в правильном формате
+        return TaskCheckResponse(
+            is_correct=False,
+            message="Неверно, попробуйте ещё раз",
+            correct_answer=task.answer
+        )

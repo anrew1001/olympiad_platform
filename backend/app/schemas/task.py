@@ -70,3 +70,61 @@ class PaginatedTaskResponse(BaseModel):
         if v > 100:
             raise ValueError('per_page не может быть больше 100')
         return v
+
+
+# === Схемы для проверки ответов пользователя ===
+
+class TaskCheckRequest(BaseModel):
+    """
+    Схема запроса для проверки ответа пользователя.
+
+    Содержит только ответ пользователя для проверки.
+    """
+
+    answer: str = Field(
+        ...,
+        min_length=1,
+        max_length=10000,
+        description="Ответ пользователя для проверки"
+    )
+
+    @field_validator('answer')
+    @classmethod
+    def validate_answer_not_empty(cls, v: str) -> str:
+        """Проверка, что ответ не состоит только из пробелов"""
+        if not v.strip():
+            raise ValueError('Ответ не может быть пустым')
+        return v
+
+
+class TaskCheckResponse(BaseModel):
+    """
+    Схема ответа на проверку задачи.
+
+    Возвращает результат проверки: правильно/неправильно,
+    сообщение и опционально правильный ответ (только при ошибке).
+    """
+
+    is_correct: bool = Field(..., description="Правильно ли решена задача")
+    message: str = Field(..., description="Сообщение пользователю о результате")
+    correct_answer: str | None = Field(
+        None,
+        description="Правильный ответ (возвращается только при неверном ответе)"
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "is_correct": True,
+                    "message": "Верно!",
+                    "correct_answer": None
+                },
+                {
+                    "is_correct": False,
+                    "message": "Неверно, попробуйте ещё раз",
+                    "correct_answer": "42"
+                }
+            ]
+        }
+    )
