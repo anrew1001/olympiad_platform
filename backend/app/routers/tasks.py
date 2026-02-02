@@ -6,7 +6,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import Task, User
+from app.models import Task, User, UserTaskAttempt, UserAchievement
 from app.schemas.task import TaskInList, TaskDetail, PaginatedTaskResponse, TaskCheckRequest, TaskCheckResponse
 from app.routers.auth import get_current_user
 
@@ -200,6 +200,66 @@ async def check_task_answer(
 
     # === 3. Проверка правильности ответа ===
     is_correct = (user_answer == correct_answer)
+
+    # === 3.5. Сохранение попытки в БД ===
+    attempt = UserTaskAttempt(
+        user_id=current_user.id,
+        task_id=task_id,
+        answer=check_data.answer,  # Сохраняем оригинальный ответ
+        is_correct=is_correct
+    )
+    db.add(attempt)
+    await db.commit()
+
+    # === 3.6. Проверка и выдача достижений (только для правильных ответов) ===
+    if is_correct:
+        # Получить количество уникальных решённых задач
+        unique_solved_query = select(
+            func.count(func.distinct(UserTaskAttempt.task_id))
+        ).where(
+            UserTaskAttempt.user_id == current_user.id,
+            UserTaskAttempt.is_correct == True
+        )
+        unique_result = await db.execute(unique_solved_query)
+        unique_solved = unique_result.scalar() or 0
+
+        # Достижение: "first_solve" (первое решение)
+        if unique_solved == 1:
+            # Проверить что достижение ещё не выдано
+            existing = await db.execute(
+                select(UserAchievement).where(
+                    UserAchievement.user_id == current_user.id,
+                    UserAchievement.type == "first_solve"
+                )
+            )
+            if not existing.scalar_one_or_none():
+                achievement = UserAchievement(
+                    user_id=current_user.id,
+                    type="first_solve",
+                    title="Первый успех",
+                    description="Решена первая задача на платформе"
+                )
+                db.add(achievement)
+
+        # Достижение: "solved_10" (10 задач)
+        if unique_solved == 10:
+            existing = await db.execute(
+                select(UserAchievement).where(
+                    UserAchievement.user_id == current_user.id,
+                    UserAchievement.type == "solved_10"
+                )
+            )
+            if not existing.scalar_one_or_none():
+                achievement = UserAchievement(
+                    user_id=current_user.id,
+                    type="solved_10",
+                    title="Мастер решений",
+                    description="Решено 10 уникальных задач"
+                )
+                db.add(achievement)
+
+        # Сохранить достижения если были выданы
+        await db.commit()
 
     # === 4. Формирование ответа ===
     if is_correct:

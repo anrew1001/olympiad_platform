@@ -57,3 +57,7 @@ cd backend && source venv/bin/activate && uvicorn app.main:app --reload
 - `docker-compose exec postgres pg_isready -U olympiad` — проверка что БД готова
 - `netstat -an | grep 5432` — проверить что порт 5432 занят
 - `netstat -an | grep 8000` — проверить что порт 8000 занят
+
+### Git
+- git fetch --prune
+- git branch -D
