@@ -12,6 +12,7 @@ venv*/
 .tox/
 .nox/
 .cache/
+*.db
 
 # IDE
 .vscode/
