@@ -7,7 +7,7 @@ from sqlalchemy import text
 
 from app.database import async_engine
 from app.models.base import Base
-from app.models import User  # noqa: F401 - импорт необходим для регистрации модели
+from app.models import User, Task, UserTaskAttempt, UserAchievement  # noqa: F401 - импорты необходимы для регистрации моделей
 
 
 async def recreate_tables():
