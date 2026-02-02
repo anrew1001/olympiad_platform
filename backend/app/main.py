@@ -3,7 +3,7 @@ import logging
 from fastapi import FastAPI
 
 from app.database import init_db
-from app.routers import health_router, auth_router, tasks_router, users_router
+from app.routers import health_router, auth_router, tasks_router, users_router, admin_router
 
 
 # Логирование
@@ -39,3 +39,4 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(tasks_router)
 app.include_router(users_router)
+app.include_router(admin_router)

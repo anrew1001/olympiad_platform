@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,71 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models import User
 from app.schemas.user import UserCreate, UserResponse, LoginRequest, TokenResponse
-from app.utils.auth import hash_password, verify_password, create_access_token, verify_token
+from app.utils.auth import hash_password, verify_password, create_access_token
+from app.dependencies.auth import get_current_user
 
 
 # API роутер для аутентификации и регистрации
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-
-# Схема безопасности для извлечения Bearer токена из заголовка Authorization
-security = HTTPBearer()
-
-
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: AsyncSession = Depends(get_db)
-) -> User:
-    """
-    Dependency для получения текущего авторизованного пользователя.
-
-    Извлекает Bearer токен из заголовка Authorization, декодирует JWT,
-    проверяет его валидность и возвращает объект пользователя из БД.
-
-    Args:
-        credentials: Bearer токен из заголовка (автоматически извлекается HTTPBearer)
-        db: Асинхронная сессия БД (dependency injection)
-
-    Returns:
-        User: Объект пользователя из базы данных
-
-    Raises:
-        HTTPException 401: Если токен невалиден, истёк или пользователь не найден
-
-    Примечание:
-        Эта функция используется как dependency в защищённых эндпоинтах:
-        @router.get("/protected")
-        async def protected(current_user: User = Depends(get_current_user)):
-            ...
-    """
-    # Извлекаем сам токен из credentials (credentials.credentials содержит строку токена)
-    token = credentials.credentials
-
-    # Декодируем и проверяем токен (verify_token выбросит HTTPException при ошибке)
-    payload = verify_token(token)
-
-    # Извлекаем user_id из payload (должен быть в поле "sub" согласно JWT стандарту)
-    user_id: str | None = payload.get("sub")
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Не авторизован",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    # Получаем пользователя из БД по ID (используем async/await паттерн)
-    query = select(User).where(User.id == int(user_id))
-    result = await db.execute(query)
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        # Токен валидный, но пользователь был удалён из БД
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Не авторизован",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    return user
 
 
 @router.post(
@@ -195,9 +135,14 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Создаём JWT токен с user_id в payload
-    # ВАЖНО: В токене только user_id (в поле "sub"), никаких паролей или хешей!
-    access_token = create_access_token(data={"sub": str(user.id)})
+    # Создаём JWT токен с user_id и role в payload
+    # ВАЖНО: В токене только user_id (в поле "sub") и role, никаких паролей или хешей!
+    access_token = create_access_token(
+        data={
+            "sub": str(user.id),
+            "role": user.role
+        }
+    )
 
     return TokenResponse(access_token=access_token, token_type="bearer")
 

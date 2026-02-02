@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
+from app.models.enums import UserRole
 
 
 # Модель пользователя олимпиадной платформы
@@ -38,8 +39,8 @@ class User(Base):
 
     # Роль пользователя (user, admin, moderator)
     role: Mapped[str] = mapped_column(
-        default="user",
-        server_default="user",
+        default=UserRole.USER.value,
+        server_default=UserRole.USER.value,
         index=True,
         nullable=False
     )
