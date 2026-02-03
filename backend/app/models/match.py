@@ -2,18 +2,19 @@ import enum
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import ForeignKey, Integer, String, Enum as SAEnum, Index, DateTime
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import ForeignKey, Integer, String, Enum as SAEnum, Index, DateTime, CheckConstraint, Text, func
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
 
 
 class MatchStatus(str, enum.Enum):
-    WAITING = "waiting"
-    ACTIVE = "active"
-    FINISHED = "finished"
-    CANCELLED = "cancelled"
-    ERROR = "error"
+    # Используем нижний регистр для согласования с БД и server_default
+    waiting = "waiting"
+    active = "active"
+    finished = "finished"
+    cancelled = "cancelled"
+    error = "error"
 
 
 class Match(Base):
@@ -36,8 +37,8 @@ class Match(Base):
 
     status: Mapped[MatchStatus] = mapped_column(
         SAEnum(MatchStatus, native_enum=False),
-        default=MatchStatus.WAITING,
-        server_default=MatchStatus.WAITING.value,
+        default=MatchStatus.waiting,
+        server_default=MatchStatus.waiting.value,
         nullable=False,
         index=True
     )
@@ -61,9 +62,21 @@ class Match(Base):
         nullable=True
     )
 
-    rating_change: Mapped[Optional[int]] = mapped_column(
+    # Изменение рейтинга. Храним для обоих игроков, так как Elo может давать разные дельты
+    # (например, новичок получает больше за победу над мастером, чем мастер теряет).
+    # Но по ТЗ было одно поле rating_change.
+    # User Request: "Продумай хранение rating_change... Либо сделай схему, которая явно хранит изменение... либо опиши"
+    # Решение: Добавляем отдельные поля для полной ясности.
+    player1_rating_change: Mapped[Optional[int]] = mapped_column(
         Integer,
-        nullable=True
+        nullable=True,
+        comment="Изменение рейтинга игрока 1 (может быть отрицательным)"
+    )
+
+    player2_rating_change: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Изменение рейтинга игрока 2 (может быть отрицательным)"
     )
 
     finished_at: Mapped[Optional[datetime]] = mapped_column(
@@ -71,10 +84,10 @@ class Match(Base):
         nullable=True
     )
 
-    # Relationships
-    # Note: We use strings for class names to avoid circular imports if those models import Match
-    # But here we just define relationships to other models if needed, or backrefs
-    # For now, simplistic definition without explicit relationships unless needed for business logic
+    __table_args__ = (
+        # Защита от self-match (игрок не может играть сам с собой)
+        CheckConstraint('player1_id != player2_id', name='check_not_self_match'),
+    )
 
 
 class MatchTask(Base):
@@ -101,7 +114,12 @@ class MatchTask(Base):
     )
 
     __table_args__ = (
+        # Индекс для быстрого получения задач матча в нужном порядке
         Index('ix_match_tasks_match_order', 'match_id', 'order'),
+        # Уникальность задачи в матче (одна задача не может быть добавлена дважды)
+        Index('ix_match_tasks_unique_task', 'match_id', 'task_id', unique=True),
+        # Уникальность порядка (на одной позиции только одна задача)
+        Index('ix_match_tasks_unique_order', 'match_id', 'order', unique=True),
     )
 
 
@@ -129,8 +147,9 @@ class MatchAnswer(Base):
         index=True
     )
 
+    # Используем Text для ответа, чтобы не было проблем с длинными строками (согласовано с UserTaskAttempt)
     answer: Mapped[str] = mapped_column(
-        String,
+        Text,
         nullable=False
     )
 
@@ -139,20 +158,15 @@ class MatchAnswer(Base):
         default=False
     )
 
-    # submitted_at is covered by Base.created_at, but we can add explicit alias or field if strictly needed.
-    # The requirement says "submitted_at". Base has created_at.
-    # I will add submitted_at as a property alias or just rely on created_at.
-    # To be safe and explicit according to spec, I'll add a field that defaults to now.
-    # But wait, Base has created_at which is exactly that.
-    # I'll rely on created_at for submission time.
-    # User specifically asked for `submitted_at`.
-    # I will alias it or just assume created_at covers it.
-    # Let's add it explicitly to avoid confusion, maybe shadowing created_at or separate.
-    # Actually, having both created_at (record creation) and submitted_at (user action) is fine, they are usually same.
-    # But Base enforces created_at.
-    # I will interpret "submitted_at" as the Base.created_at field.
+    # Явное поле submitted_at по требованию ревью
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False
+    )
 
-    # Update: Constraint from spec: Unique index on (match_id, user_id, task_id)
     __table_args__ = (
+        # Уникальность ответа пользователя на конкретную задачу в конкретном матче
+        # При повторной отправке делается UPSERT
         Index('ix_match_answers_unique_submission', 'match_id', 'user_id', 'task_id', unique=True),
     )
