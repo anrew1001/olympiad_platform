@@ -13,6 +13,9 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = '168989cbaec8'
+# down_revision is None because this migration assumes an existing database schema
+# initialized via scripts (e.g. recreate_tables.py or init_db).
+# It serves as the baseline for Alembic-managed migrations for the PvP feature.
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -23,15 +26,13 @@ def upgrade() -> None:
     op.create_table('matches',
         sa.Column('player1_id', sa.Integer(), nullable=False),
         sa.Column('player2_id', sa.Integer(), nullable=False),
-        # Enum values now lowercase to match model definition
         sa.Column('status', sa.Enum('waiting', 'active', 'finished', 'cancelled', 'error', name='matchstatus', native_enum=False), server_default='waiting', nullable=False),
         sa.Column('player1_score', sa.Integer(), server_default='0', nullable=False),
         sa.Column('player2_score', sa.Integer(), server_default='0', nullable=False),
         sa.Column('winner_id', sa.Integer(), nullable=True),
-        # Split rating change columns
         sa.Column('player1_rating_change', sa.Integer(), nullable=True, comment='Изменение рейтинга игрока 1 (может быть отрицательным)'),
         sa.Column('player2_rating_change', sa.Integer(), nullable=True, comment='Изменение рейтинга игрока 2 (может быть отрицательным)'),
-        sa.Column('finished_at', sa.DateTime(), nullable=True),
+        sa.Column('finished_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
         sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
@@ -39,8 +40,8 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(['player2_id'], ['users.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['winner_id'], ['users.id'], ondelete='SET NULL'),
         sa.PrimaryKeyConstraint('id'),
-        # Self-match protection
-        sa.CheckConstraint('player1_id != player2_id', name='check_not_self_match')
+        sa.CheckConstraint('player1_id != player2_id', name='check_not_self_match'),
+        sa.CheckConstraint('winner_id IS NULL OR winner_id = player1_id OR winner_id = player2_id', name='ck_match_winner_participant')
     )
     op.create_index(op.f('ix_matches_player1_id'), 'matches', ['player1_id'], unique=False)
     op.create_index(op.f('ix_matches_player2_id'), 'matches', ['player2_id'], unique=False)
@@ -59,9 +60,8 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_match_tasks_match_id'), 'match_tasks', ['match_id'], unique=False)
-    op.create_index('ix_match_tasks_match_order', 'match_tasks', ['match_id', 'order'], unique=False) # Used for sorting
+    op.create_index('ix_match_tasks_match_order', 'match_tasks', ['match_id', 'order'], unique=False)
     op.create_index(op.f('ix_match_tasks_task_id'), 'match_tasks', ['task_id'], unique=False)
-    # Unique constraints
     op.create_index('ix_match_tasks_unique_task', 'match_tasks', ['match_id', 'task_id'], unique=True)
     op.create_index('ix_match_tasks_unique_order', 'match_tasks', ['match_id', 'order'], unique=True)
 
@@ -70,10 +70,8 @@ def upgrade() -> None:
         sa.Column('match_id', sa.Integer(), nullable=False),
         sa.Column('user_id', sa.Integer(), nullable=False),
         sa.Column('task_id', sa.Integer(), nullable=False),
-        # Changed to Text
         sa.Column('answer', sa.Text(), nullable=False),
-        sa.Column('is_correct', sa.Boolean(), nullable=False),
-        # Added submitted_at with timezone=True and server default
+        sa.Column('is_correct', sa.Boolean(), server_default=sa.false(), nullable=False),
         sa.Column('submitted_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),

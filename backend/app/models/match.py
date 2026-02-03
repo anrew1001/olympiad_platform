@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import ForeignKey, Integer, String, Enum as SAEnum, Index, DateTime, CheckConstraint, Text, func
+from sqlalchemy import ForeignKey, Integer, String, Enum as SAEnum, Index, DateTime, CheckConstraint, Text, func, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -63,10 +63,6 @@ class Match(Base):
     )
 
     # Изменение рейтинга. Храним для обоих игроков, так как Elo может давать разные дельты
-    # (например, новичок получает больше за победу над мастером, чем мастер теряет).
-    # Но по ТЗ было одно поле rating_change.
-    # User Request: "Продумай хранение rating_change... Либо сделай схему, которая явно хранит изменение... либо опиши"
-    # Решение: Добавляем отдельные поля для полной ясности.
     player1_rating_change: Mapped[Optional[int]] = mapped_column(
         Integer,
         nullable=True,
@@ -80,13 +76,18 @@ class Match(Base):
     )
 
     finished_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=True
     )
 
     __table_args__ = (
         # Защита от self-match (игрок не может играть сам с собой)
         CheckConstraint('player1_id != player2_id', name='check_not_self_match'),
+        # Победитель должен быть одним из участников матча (или NULL)
+        CheckConstraint(
+            'winner_id IS NULL OR winner_id = player1_id OR winner_id = player2_id',
+            name='ck_match_winner_participant'
+        ),
     )
 
 
@@ -147,7 +148,7 @@ class MatchAnswer(Base):
         index=True
     )
 
-    # Используем Text для ответа, чтобы не было проблем с длинными строками (согласовано с UserTaskAttempt)
+    # Используем Text для ответа
     answer: Mapped[str] = mapped_column(
         Text,
         nullable=False
@@ -155,7 +156,8 @@ class MatchAnswer(Base):
 
     is_correct: Mapped[bool] = mapped_column(
         nullable=False,
-        default=False
+        default=False,
+        server_default=false()
     )
 
     # Явное поле submitted_at по требованию ревью
