@@ -16,14 +16,12 @@ class User(Base):
     # Уникальное имя пользователя для входа
     username: Mapped[str] = mapped_column(
         unique=True,
-        index=True,
         nullable=False
     )
 
     # Электронная почта пользователя
     email: Mapped[str] = mapped_column(
         unique=True,
-        index=True,
         nullable=False
     )
 
