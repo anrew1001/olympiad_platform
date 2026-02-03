@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     # Время жизни access токена в часах
     ACCESS_TOKEN_EXPIRE_HOURS: int
 
+    # Размер пула подключений к БД
+    POSTGRES_POOL_SIZE: int = 20
+
+    # Максимальное количество дополнительных подключений (overflow)
+    POSTGRES_MAX_OVERFLOW: int = 10
+
     # Конфигурация для загрузки из .env файла
     model_config = SettingsConfigDict(
         env_file=".env",
