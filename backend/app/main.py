@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import FastAPI
+from fastapi.responses import ORJSONResponse
 
 from app.database import init_db
 from app.routers import health_router
@@ -14,6 +15,7 @@ app = FastAPI(
     title="Olympiad Platform API",
     description="API для олимпиадной платформы",
     version="1.0.0",
+    default_response_class=ORJSONResponse,
 )
 
 
