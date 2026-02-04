@@ -59,7 +59,7 @@ async def register_user(
         )
 
     # Хеширование пароля
-    hashed_password = hash_password(user_data.password)
+    hashed_password = await hash_password(user_data.password)
 
     # Создание нового пользователя
     new_user = User(
@@ -128,7 +128,7 @@ async def login(
         )
 
     # Проверяем пароль с помощью bcrypt (constant-time comparison)
-    if not verify_password(login_data.password, user.hashed_password):
+    if not await verify_password(login_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверный email или пароль",  # То же самое сообщение!

@@ -3,13 +3,15 @@ from datetime import datetime, timedelta, timezone
 
 from jose import jwt, JWTError, ExpiredSignatureError
 from fastapi import HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 
 from app.config import settings
 
 
-def hash_password(password: str) -> str:
+async def hash_password(password: str) -> str:
     """
     Хеширует открытый пароль используя bcrypt алгоритм.
+    Выполняется в пуле потоков, чтобы не блокировать event loop.
 
     Args:
         password: Открытый пароль в виде строки
@@ -17,22 +19,23 @@ def hash_password(password: str) -> str:
     Returns:
         Хешированный пароль в виде строки
     """
-    # Конвертируем пароль в байты
-    password_bytes = password.encode('utf-8')
+    def _hash():
+        # Конвертируем пароль в байты
+        password_bytes = password.encode('utf-8')
+        # Генерируем соль
+        salt = bcrypt.gensalt()
+        # Хешируем пароль
+        hashed = bcrypt.hashpw(password_bytes, salt)
+        # Возвращаем как строку
+        return hashed.decode('utf-8')
 
-    # Генерируем соль
-    salt = bcrypt.gensalt()
-
-    # Хешируем пароль
-    hashed = bcrypt.hashpw(password_bytes, salt)
-
-    # Возвращаем как строку
-    return hashed.decode('utf-8')
+    return await run_in_threadpool(_hash)
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
+async def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     Проверяет соответствие открытого пароля хешированному паролю.
+    Выполняется в пуле потоков, чтобы не блокировать event loop.
 
     Args:
         plain_password: Открытый пароль для проверки
@@ -41,7 +44,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         True если пароли совпадают, False в противном случае
     """
-    return bcrypt.checkpw(
+    return await run_in_threadpool(
+        bcrypt.checkpw,
         plain_password.encode('utf-8'),
         hashed_password.encode('utf-8')
     )
