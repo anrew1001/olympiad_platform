@@ -201,7 +201,7 @@ async def check_task_answer(
     # === 3. Проверка правильности ответа ===
     is_correct = (user_answer == correct_answer)
 
-    # === 3.5. Сохранение попытки в БД ===
+    # === 3.5. Подготовка попытки для сохранения ===
     attempt = UserTaskAttempt(
         user_id=current_user.id,
         task_id=task_id,
@@ -209,30 +209,33 @@ async def check_task_answer(
         is_correct=is_correct
     )
     db.add(attempt)
-    await db.commit()
 
     # === 3.6. Проверка и выдача достижений (только для правильных ответов) ===
     if is_correct:
-        # Получить количество уникальных решённых задач
-        unique_solved_query = select(
-            func.count(func.distinct(UserTaskAttempt.task_id))
-        ).where(
-            UserTaskAttempt.user_id == current_user.id,
-            UserTaskAttempt.is_correct == True
+        # Оптимизация: сначала проверяем, какие достижения уже есть,
+        # чтобы избежать дорогого подсчёта уникальных решений
+        milestone_types = ["first_solve", "solved_10"]
+        existing_query = select(UserAchievement.type).where(
+            UserAchievement.user_id == current_user.id,
+            UserAchievement.type.in_(milestone_types)
         )
-        unique_result = await db.execute(unique_solved_query)
-        unique_solved = unique_result.scalar() or 0
+        existing_result = await db.execute(existing_query)
+        existing_types = set(existing_result.scalars().all())
 
-        # Достижение: "first_solve" (первое решение)
-        if unique_solved == 1:
-            # Проверить что достижение ещё не выдано
-            existing = await db.execute(
-                select(UserAchievement).where(
-                    UserAchievement.user_id == current_user.id,
-                    UserAchievement.type == "first_solve"
-                )
+        # Считаем решения только если не все достижения получены
+        if len(existing_types) < len(milestone_types):
+            # Получить количество уникальных решённых задач
+            unique_solved_query = select(
+                func.count(func.distinct(UserTaskAttempt.task_id))
+            ).where(
+                UserTaskAttempt.user_id == current_user.id,
+                UserTaskAttempt.is_correct == True
             )
-            if not existing.scalar_one_or_none():
+            unique_result = await db.execute(unique_solved_query)
+            unique_solved = (unique_result.scalar() or 0)
+
+            # Достижение: "first_solve" (первое решение)
+            if unique_solved >= 1 and "first_solve" not in existing_types:
                 achievement = UserAchievement(
                     user_id=current_user.id,
                     type="first_solve",
@@ -241,15 +244,8 @@ async def check_task_answer(
                 )
                 db.add(achievement)
 
-        # Достижение: "solved_10" (10 задач)
-        if unique_solved == 10:
-            existing = await db.execute(
-                select(UserAchievement).where(
-                    UserAchievement.user_id == current_user.id,
-                    UserAchievement.type == "solved_10"
-                )
-            )
-            if not existing.scalar_one_or_none():
+            # Достижение: "solved_10" (10 задач)
+            if unique_solved >= 10 and "solved_10" not in existing_types:
                 achievement = UserAchievement(
                     user_id=current_user.id,
                     type="solved_10",
@@ -258,8 +254,9 @@ async def check_task_answer(
                 )
                 db.add(achievement)
 
-        # Сохранить достижения если были выданы
-        await db.commit()
+    # === 3.7. Сохранение всех изменений за одну транзакцию ===
+    # Это экономит один COMMIT и гарантирует атомарность (попытка + достижения)
+    await db.commit()
 
     # === 4. Формирование ответа ===
     if is_correct:

@@ -1,0 +1,3 @@
+## 2025-05-15 - [Optimization of Achievement Logic and Transactions]
+**Learning:** Performing expensive aggregate queries (like `count(distinct task_id)`) on every request in a hot path can significantly degrade performance as the user's data grows. Additionally, multiple small commits within a single logical operation increase database overhead due to redundant disk I/O and network roundtrips.
+**Action:** Implement "pre-checks" using indexed unique columns to skip expensive queries when the result is already known or redundant. Consolidate multiple database commits into a single atomic transaction at the end of the operation.
