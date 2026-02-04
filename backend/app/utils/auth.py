@@ -1,3 +1,4 @@
+import asyncio
 from passlib.context import CryptContext
 
 
@@ -5,9 +6,10 @@ from passlib.context import CryptContext
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-def hash_password(password: str) -> str:
+async def hash_password(password: str) -> str:
     """
     Хеширует открытый пароль используя bcrypt алгоритм.
+    Выполняется в отдельном потоке, чтобы не блокировать event loop.
 
     Args:
         password: Открытый пароль в виде строки
@@ -15,12 +17,14 @@ def hash_password(password: str) -> str:
     Returns:
         Хешированный пароль в виде строки
     """
-    return pwd_context.hash(password)
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, pwd_context.hash, password)
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
+async def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     Проверяет соответствие открытого пароля хешированному паролю.
+    Выполняется в отдельном потоке, чтобы не блокировать event loop.
 
     Args:
         plain_password: Открытый пароль для проверки
@@ -29,4 +33,5 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         True если пароли совпадают, False в противном случае
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, pwd_context.verify, plain_password, hashed_password)
