@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.responses import ORJSONResponse
 
 from app.database import init_db
-from app.routers import health_router, auth_router, tasks_router, users_router, admin_router
+from app.routers import health_router, auth_router, tasks_router, users_router, admin_router, matches_router
 
 
 # Логирование
@@ -42,3 +42,4 @@ app.include_router(auth_router)
 app.include_router(tasks_router)
 app.include_router(users_router)
 app.include_router(admin_router)
+app.include_router(matches_router)
