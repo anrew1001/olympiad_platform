@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import secrets
 import time
 from datetime import datetime, timezone
 
@@ -20,6 +21,8 @@ from app.services.match_logic import (
     process_answer,
     check_match_completion,
     finalize_match,
+    finalize_match_forfeit,
+    handle_technical_error,
 )
 from app.websocket.manager import manager
 from app.schemas.websocket import (
@@ -31,6 +34,8 @@ from app.schemas.websocket import (
     OpponentScoredEvent,
     MatchEndEvent,
     OpponentDisconnectedEvent,
+    OpponentReconnectedEvent,
+    ReconnectionSuccessEvent,
     ErrorEvent,
     PingEvent,
     TaskInfo,
@@ -44,6 +49,7 @@ router = APIRouter(prefix="/api/pvp", tags=["pvp-websocket"])
 # Heartbeat settings
 HEARTBEAT_INTERVAL = 30  # секунды
 HEARTBEAT_TIMEOUT = 30  # секунды
+DISCONNECT_TIMEOUT = 30  # секунды до форфейта при отключении
 
 
 # ============================================================================
@@ -209,6 +215,19 @@ async def handle_message(
             )
             return
 
+        # CHECK RATE LIMIT: Max 1 answer per second per user
+        is_allowed, wait_time = manager.check_rate_limit(match_id, user_id)
+        if not is_allowed:
+            await manager.send_personal(
+                match_id,
+                user_id,
+                ErrorEvent(
+                    message=f"Rate limited. Wait {wait_time:.1f}s before next answer",
+                    code="RATE_LIMITED",
+                ).model_dump(),
+            )
+            return
+
         # Обработать ответ в новой БД сессии
         async with async_session_maker() as session:
             try:
@@ -286,13 +305,14 @@ async def handle_message(
 
                 if is_complete:
                     # Финализировать матч
-                    result_data = await finalize_match(match_id, session)
+                    result_data = await finalize_match(match_id, session, reason="completion")
                     await session.commit()
 
                     # Отправить match_end обоим игрокам
                     await manager.broadcast(
                         match_id,
                         MatchEndEvent(
+                            reason="completion",
                             winner_id=result_data["winner_id"],
                             player1_rating_change=result_data["player1_rating_change"],
                             player1_new_rating=result_data["player1_new_rating"],
@@ -305,7 +325,7 @@ async def handle_message(
                         ).model_dump(),
                     )
 
-                    logger.info(f"Match {match_id} finished")
+                    logger.info(f"Match {match_id} finished normally")
                 else:
                     await session.commit()
 
@@ -451,13 +471,49 @@ async def websocket_endpoint(
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
-        # 4. Register in ConnectionManager
+        # 4. Register in ConnectionManager with session tracking
         try:
-            await manager.connect(match_id, user.id, websocket)
+            session_id = secrets.token_urlsafe(32)  # Generate secure session ID
+            is_reconnection = await manager.connect_with_session(
+                match_id, user.id, websocket, session_id
+            )
         except ValueError as e:
             await send_error(websocket, str(e), "CONNECTION_ERROR")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
+
+        # If reconnection, notify opponent and send current scores
+        if is_reconnection:
+            logger.info(f"User {user.id} reconnected to match {match_id}")
+            opponent_id = manager.get_opponent_id(match_id, user.id)
+
+            if opponent_id:
+                # Notify opponent of reconnection
+                await manager.send_personal(
+                    match_id,
+                    opponent_id,
+                    OpponentReconnectedEvent(
+                        timestamp=datetime.utcnow().isoformat()
+                    ).model_dump(),
+                )
+
+                # Send reconnection success to this player with current scores
+                async with async_session_maker() as session:
+                    result = await session.execute(
+                        select(Match).where(Match.id == match_id)
+                    )
+                    match_data = result.scalar_one_or_none()
+                    if match_data:
+                        time_elapsed = int((datetime.utcnow() - match_data.created_at).total_seconds())
+                        await manager.send_personal(
+                            match_id,
+                            user.id,
+                            ReconnectionSuccessEvent(
+                                your_score=match_data.player1_score if user.id == match_data.player1_id else match_data.player2_score,
+                                opponent_score=match_data.player2_score if user.id == match_data.player1_id else match_data.player1_score,
+                                time_elapsed=time_elapsed,
+                            ).model_dump(),
+                        )
 
         # 5. Send player_joined if opponent connected
         opponent_id = manager.get_opponent_id(match_id, user.id)
@@ -542,18 +598,87 @@ async def websocket_endpoint(
 
         # Cleanup
         if user:
-            await manager.disconnect(match_id, user.id)
-            logger.info(f"Cleaned up user {user.id} from match {match_id}")
-
-            # Notify opponent of disconnection
             if match:
                 opponent_id = manager.get_opponent_id(match_id, user.id)
-                if opponent_id and manager.is_connected(match_id, opponent_id):
+
+                # Case 1: Check if BOTH players disconnected (technical error)
+                if opponent_id is None or not manager.is_connected(match_id, opponent_id):
+                    logger.warning(f"Both players disconnected from match {match_id}")
+                    async with async_session_maker() as session:
+                        try:
+                            await handle_technical_error(
+                                match_id, session,
+                                "Both players disconnected"
+                            )
+                            await session.commit()
+                        except Exception as e:
+                            logger.error(f"Error handling technical error for match {match_id}: {e}")
+
+                # Case 2: Only this player disconnected - start timeout for reconnection
+                elif opponent_id and manager.is_connected(match_id, opponent_id):
+                    logger.info(
+                        f"User {user.id} disconnected from match {match_id}, "
+                        f"opponent {opponent_id} still connected. Starting {DISCONNECT_TIMEOUT}s timeout."
+                    )
+
+                    # Define timeout callback for forfeit
+                    async def disconnect_timeout_callback():
+                        async with async_session_maker() as session:
+                            try:
+                                logger.warning(
+                                    f"Disconnect timeout expired for user {user.id} in match {match_id}. "
+                                    f"Finalizing as forfeit."
+                                )
+                                result_data = await finalize_match_forfeit(
+                                    match_id, user.id, session
+                                )
+                                await session.commit()
+
+                                # Send match_end to remaining player
+                                await manager.send_personal(
+                                    match_id,
+                                    opponent_id,
+                                    MatchEndEvent(
+                                        reason="forfeit",
+                                        winner_id=result_data["winner_id"],
+                                        player1_rating_change=result_data["player1_rating_change"],
+                                        player1_new_rating=result_data["player1_new_rating"],
+                                        player2_rating_change=result_data["player2_rating_change"],
+                                        player2_new_rating=result_data["player2_new_rating"],
+                                        final_scores={
+                                            "player1_score": result_data["final_scores"]["player1_score"],
+                                            "player2_score": result_data["final_scores"]["player2_score"],
+                                        },
+                                    ).model_dump(),
+                                )
+
+                                logger.info(f"Forfeit match {match_id}: player {opponent_id} wins")
+                            except Exception as e:
+                                logger.error(f"Error in disconnect timeout: {e}")
+
+                    # Start timer
+                    await manager.start_disconnect_timer(
+                        match_id,
+                        user.id,
+                        DISCONNECT_TIMEOUT,
+                        disconnect_timeout_callback,
+                    )
+
+                    # Notify opponent of disconnection with timeout info
                     await manager.send_personal(
                         match_id,
                         opponent_id,
                         OpponentDisconnectedEvent(
-                            timestamp=datetime.now(timezone.utc).isoformat()
+                            timestamp=datetime.utcnow().isoformat(),
+                            reconnecting=True,
+                            timeout_seconds=DISCONNECT_TIMEOUT,
                         ).model_dump(),
                     )
-                    logger.info(f"Notified opponent {opponent_id} of user {user.id} disconnect")
+                    logger.info(
+                        f"Notified opponent {opponent_id} of user {user.id} disconnect "
+                        f"(reconnecting: True, timeout: {DISCONNECT_TIMEOUT}s)"
+                    )
+
+            # Disconnect from ConnectionManager
+            await manager.disconnect(match_id, user.id)
+            logger.info(f"Cleaned up user {user.id} from match {match_id}")

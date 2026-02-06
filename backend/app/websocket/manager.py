@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Dict, Optional, Set
+from typing import Callable, Dict, Optional, Set
 
 from fastapi import WebSocket
 
@@ -18,6 +18,8 @@ class ConnectionManager:
     - Каждая комната содержит набор игроков (user_id -> websocket)
     - Per-room asyncio.Lock для thread-safe операций
     - O(1) lookup для всех операций
+    - Session tracking для восстановления соединения (reconnection)
+    - Rate limiting для защиты от spam ответов
     """
 
     def __init__(self):
@@ -26,6 +28,14 @@ class ConnectionManager:
         self._rooms: Dict[int, Dict[int, WebSocket]] = {}
         # Per-room locks для предотвращения race conditions
         self._locks: Dict[int, asyncio.Lock] = {}
+
+        # Session tracking для reconnection
+        # Структура: {match_id: {user_id: {'session_id': str, 'disconnect_task': Task|None}}}
+        self._sessions: Dict[int, Dict[int, dict]] = {}
+
+        # Rate limiting для answer submission
+        # Структура: {match_id: {user_id: {'last_answer_time': float}}}
+        self._rate_limits: Dict[int, Dict[int, dict]] = {}
 
     async def connect(
         self,
@@ -61,6 +71,8 @@ class ConnectionManager:
         """
         Удаляет игрока из комнаты матча.
 
+        Также очищает session tracking и rate limiting информацию.
+
         Args:
             match_id: ID матча
             user_id: ID пользователя
@@ -75,6 +87,12 @@ class ConnectionManager:
                     del self._rooms[match_id]
                     if match_id in self._locks:
                         del self._locks[match_id]
+
+                    # Очистить session и rate limit данные
+                    if match_id in self._sessions:
+                        del self._sessions[match_id]
+                    if match_id in self._rate_limits:
+                        del self._rate_limits[match_id]
 
     async def send_personal(
         self,
@@ -225,6 +243,184 @@ class ConnectionManager:
             self._locks[match_id] = asyncio.Lock()
 
         return self._locks[match_id]
+
+    # ===== SESSION TRACKING METHODS (для reconnection) =====
+
+    async def connect_with_session(
+        self,
+        match_id: int,
+        user_id: int,
+        websocket: WebSocket,
+        session_id: str,
+    ) -> bool:
+        """
+        Подключает игрока с отслеживанием сессии (для reconnection).
+
+        Если игрок уже был подключен в этой сессии и отключился,
+        отмена timeout таска для reconnection.
+
+        Args:
+            match_id: ID матча
+            user_id: ID пользователя
+            websocket: WebSocket соединение
+            session_id: Уникальный ID сессии (от клиента)
+
+        Returns:
+            True если это переподключение (reconnection), False если новое подключение
+
+        Raises:
+            ValueError: Если игрок уже подключён
+        """
+        async with self._get_room_lock(match_id):
+            # Инициализировать session dict если нет
+            if match_id not in self._sessions:
+                self._sessions[match_id] = {}
+
+            # Проверить есть ли уже сессия для этого игрока
+            if user_id in self._sessions[match_id]:
+                existing_session = self._sessions[match_id][user_id]
+                # Если есть disconnect_task, это переподключение
+                if existing_session.get("disconnect_task"):
+                    # Отменить timeout таск
+                    existing_session["disconnect_task"].cancel()
+                    existing_session["disconnect_task"] = None
+                    logger.info(f"Player {user_id} reconnected to match {match_id}")
+                    # Обновить websocket
+                    self._rooms[match_id][user_id] = websocket
+                    return True
+
+            # Новое подключение
+            if match_id not in self._rooms:
+                self._rooms[match_id] = {}
+
+            if user_id in self._rooms[match_id]:
+                raise ValueError(f"User {user_id} already connected to match {match_id}")
+
+            self._rooms[match_id][user_id] = websocket
+
+            # Сохранить session info
+            self._sessions[match_id][user_id] = {
+                "session_id": session_id,
+                "disconnect_task": None,
+            }
+
+            logger.info(f"Player {user_id} connected to match {match_id} (new session)")
+            return False
+
+    def cancel_disconnect_timer(self, match_id: int, user_id: int) -> bool:
+        """
+        Отменяет pending disconnect timeout task.
+
+        Args:
+            match_id: ID матча
+            user_id: ID пользователя
+
+        Returns:
+            True если таск был отменён, False если его не было
+        """
+        if match_id not in self._sessions or user_id not in self._sessions[match_id]:
+            return False
+
+        session_info = self._sessions[match_id][user_id]
+        if session_info.get("disconnect_task"):
+            session_info["disconnect_task"].cancel()
+            session_info["disconnect_task"] = None
+            return True
+
+        return False
+
+    async def start_disconnect_timer(
+        self,
+        match_id: int,
+        user_id: int,
+        timeout_seconds: int,
+        callback: Callable,
+    ) -> None:
+        """
+        Запускает таймер на отключение (30 сек для reconnection).
+
+        Если за timeout_seconds игрок не переподключится,
+        вызывает callback для forfeit логики.
+
+        Args:
+            match_id: ID матча
+            user_id: ID пользователя
+            timeout_seconds: Секунды до timeout (обычно 30)
+            callback: Async функция для вызова при timeout
+        """
+        if match_id not in self._sessions or user_id not in self._sessions[match_id]:
+            logger.warning(f"No session for user {user_id} in match {match_id}")
+            return
+
+        async def timeout_handler():
+            try:
+                await asyncio.sleep(timeout_seconds)
+                logger.warning(f"Player {user_id} disconnect timeout in match {match_id}")
+                await callback()
+            except asyncio.CancelledError:
+                logger.debug(f"Disconnect timer cancelled for player {user_id}")
+
+        # Создать и сохранить таск
+        task = asyncio.create_task(timeout_handler())
+        self._sessions[match_id][user_id]["disconnect_task"] = task
+
+    # ===== RATE LIMITING METHODS =====
+
+    def check_rate_limit(self, match_id: int, user_id: int) -> tuple[bool, float]:
+        """
+        Проверяет rate limit для отправки ответа.
+
+        Rate limit: Максимум 1 ответ в секунду на пользователя.
+
+        Args:
+            match_id: ID матча
+            user_id: ID пользователя
+
+        Returns:
+            Кортеж (is_allowed, seconds_until_allowed)
+            - is_allowed: True если можно отправить ответ
+            - seconds_until_allowed: Сколько секунд ждать если не разрешено (0.0 если разрешено)
+        """
+        import time
+
+        # Инициализировать rate limit dict если нет
+        if match_id not in self._rate_limits:
+            self._rate_limits[match_id] = {}
+
+        current_time = time.time()
+
+        if user_id not in self._rate_limits[match_id]:
+            # Первый ответ
+            self._rate_limits[match_id][user_id] = {"last_answer_time": current_time}
+            return True, 0.0
+
+        user_limit = self._rate_limits[match_id][user_id]
+        time_since_last_answer = current_time - user_limit["last_answer_time"]
+
+        if time_since_last_answer < 1.0:
+            wait_time = 1.0 - time_since_last_answer
+            logger.debug(
+                f"Rate limit exceeded for user {user_id} in match {match_id}, "
+                f"wait {wait_time:.2f}s"
+            )
+            return False, wait_time
+
+        # Обновить last answer time
+        user_limit["last_answer_time"] = current_time
+        return True, 0.0
+
+    def reset_rate_limit(self, match_id: int, user_id: int) -> None:
+        """
+        Сбрасывает rate limit для пользователя.
+
+        Используется при отключении или завершении матча.
+
+        Args:
+            match_id: ID матча
+            user_id: ID пользователя
+        """
+        if match_id in self._rate_limits and user_id in self._rate_limits[match_id]:
+            del self._rate_limits[match_id][user_id]
 
     def total_connections(self) -> int:
         """Возвращает общее количество активных соединений."""
