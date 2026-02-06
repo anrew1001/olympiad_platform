@@ -90,6 +90,7 @@ class MatchEndEvent(BaseModel):
     """Событие: матч завершился."""
 
     type: str = Field("match_end", description="Тип события")
+    reason: str = Field("completion", description="Причина завершения: completion | forfeit | technical_error")
     winner_id: Optional[int] = Field(None, description="ID победителя (None при ничье)")
     player1_rating_change: int = Field(..., description="Изменение рейтинга player1")
     player1_new_rating: int = Field(..., description="Новый рейтинг player1")
@@ -103,6 +104,24 @@ class OpponentDisconnectedEvent(BaseModel):
 
     type: str = Field("opponent_disconnected", description="Тип события")
     timestamp: str = Field(..., description="Время отключения (ISO format)")
+    reconnecting: bool = Field(True, description="Может ли соперник переподключиться?")
+    timeout_seconds: Optional[int] = Field(None, description="Секунды до форфейта (обычно 30)")
+
+
+class OpponentReconnectedEvent(BaseModel):
+    """Событие: соперник переподключился."""
+
+    type: str = Field("opponent_reconnected", description="Тип события")
+    timestamp: str = Field(..., description="Время переподключения (ISO format)")
+
+
+class ReconnectionSuccessEvent(BaseModel):
+    """Событие: вы успешно переподключились."""
+
+    type: str = Field("reconnection_success", description="Тип события")
+    your_score: int = Field(..., description="Ваш текущий счёт")
+    opponent_score: int = Field(..., description="Счёт соперника")
+    time_elapsed: int = Field(..., description="Секунды с начала матча")
 
 
 class ErrorEvent(BaseModel):
