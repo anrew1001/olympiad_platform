@@ -30,10 +30,10 @@ class Match(Base):
         index=True,
     )
 
-    # Второй игрок матча
-    player2_id: Mapped[int] = mapped_column(
+    # Второй игрок матча (nullable для waiting матчей без соперника)
+    player2_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 
@@ -115,8 +115,8 @@ class Match(Base):
         lazy="joined",
     )
 
-    # Игрок 2
-    player2: Mapped["User"] = relationship(
+    # Игрок 2 (None если ждём соперника)
+    player2: Mapped[Optional["User"]] = relationship(
         "User",
         foreign_keys=[player2_id],
         lazy="joined",
