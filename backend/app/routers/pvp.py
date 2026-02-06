@@ -9,6 +9,7 @@ session.begin() вызывать НЕЛЬЗЯ.
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -52,14 +53,16 @@ async def find_match(
     )
 
     # Коммитим всё: Match row + MatchTask rows (если match стал active)
+    match_id = match.id
     await db.commit()
 
-    # После commit нужен свежий SELECT чтобы загрузить relationships.
-    # expire_on_commit=False означает что match.id и match.status до сих пор доступны,
-    # но relationships (player1, player2, tasks) были подавлены noload и не загружены.
-    # Свежий SELECT без options() позволяет модельным lazy-стратегиям отработать.
-    result = await db.execute(select(Match).where(Match.id == match.id))
-    match = result.scalar_one()
+    # После commit: свежий SELECT с eager loading relationships
+    result = await db.execute(
+        select(Match)
+        .where(Match.id == match_id)
+        .options(joinedload(Match.player1), joinedload(Match.player2))
+    )
+    match = result.unique().scalar_one()
 
     # Построение response: opponent зависит от статуса
     opponent = None
