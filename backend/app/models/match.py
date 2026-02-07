@@ -8,6 +8,7 @@ from sqlalchemy import (
     CheckConstraint,
     Enum as SAEnum,
     func,
+    desc,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -139,6 +140,21 @@ class Match(Base):
         Index("ix_matches_player1_status", "player1_id", "status"),
         Index("ix_matches_player2_status", "player2_id", "status"),
         Index("ix_matches_status_created", "status", "created_at"),
+        # Индексы для истории матчей (НОВЫЕ)
+        # Composite index для быстрой выборки матчей player1 упорядоченных по finished_at
+        Index(
+            "ix_matches_player1_finished",
+            "player1_id",
+            desc("finished_at"),
+        ),
+        # Composite index для быстрой выборки матчей player2 упорядоченных по finished_at
+        Index(
+            "ix_matches_player2_finished",
+            "player2_id",
+            desc("finished_at"),
+        ),
+        # Index для фильтра по winner_id (для фильтра результата)
+        Index("ix_matches_winner_id", "winner_id"),
     )
 
 
