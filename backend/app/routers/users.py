@@ -1,15 +1,26 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import select, func, case, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
 
 from app.database import get_db
-from app.models import User, UserTaskAttempt, Task, UserAchievement
+from app.models import User, UserTaskAttempt, Task, UserAchievement, Match
 from app.dependencies.auth import get_current_user
 from app.schemas.stats import (
     UserStatsResponse,
     DifficultyStats,
     RecentActivityItem,
     AchievementItem
+)
+from app.schemas.match_history import (
+    PaginatedMatchHistoryResponse,
+    MatchDetailResponse,
+    MatchStatsResponse,
+)
+from app.services.match_history import (
+    get_match_history,
+    get_match_detail,
+    get_match_stats,
 )
 
 
@@ -171,3 +182,131 @@ async def get_user_stats(
         recent_activity=recent_activity,
         achievements=achievements
     )
+
+
+# ============================================================================
+# История PvP матчей
+# ============================================================================
+
+@router.get(
+    "/me/matches",
+    response_model=PaginatedMatchHistoryResponse,
+    summary="История PvP матчей пользователя",
+    description=(
+        "Получить историю всех PvP матчей текущего пользователя с поддержкой "
+        "пагинации, фильтрации и сортировки. "
+        "Фильтры: status (finished/active/all), result (won/lost/draw/all), "
+        "opponent_username (поиск по имени). "
+        "Сортировка: finished_at, rating_change."
+    ),
+    tags=["match-history"],
+)
+async def get_my_matches(
+    page: int = Query(1, ge=1, description="Номер страницы"),
+    per_page: int = Query(10, ge=1, le=50, description="Элементов на странице"),
+    status: Optional[str] = Query(
+        None,
+        description="Фильтр по статусу: finished, active, all"
+    ),
+    result: Optional[str] = Query(
+        None,
+        description="Фильтр по результату: won, lost, draw, all"
+    ),
+    opponent_username: Optional[str] = Query(
+        None,
+        description="Поиск по имени соперника"
+    ),
+    sort_by: str = Query(
+        "finished_at",
+        description="Сортировка по: finished_at, rating_change"
+    ),
+    order: str = Query(
+        "desc",
+        description="Порядок сортировки: asc, desc"
+    ),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PaginatedMatchHistoryResponse:
+    """
+    Получение истории PvP матчей текущего пользователя.
+
+    Query параметры позволяют фильтровать и сортировать результаты.
+    """
+    return await get_match_history(
+        user_id=current_user.id,
+        page=page,
+        per_page=per_page,
+        status=status,
+        result=result,
+        opponent_username=opponent_username,
+        sort_by=sort_by,
+        order=order,
+        session=db,
+    )
+
+
+@router.get(
+    "/me/matches/stats",
+    response_model=MatchStatsResponse,
+    summary="Статистика PvP матчей и история рейтинга",
+    description=(
+        "Получить общую статистику по PvP матчам (W/L/D, win rate) "
+        "и историю изменения рейтинга за последние 50 матчей для графика."
+    ),
+    tags=["match-history"],
+)
+async def get_my_match_stats(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MatchStatsResponse:
+    """
+    Получение статистики по PvP матчам и истории рейтинга.
+    """
+    return await get_match_stats(current_user.id, db)
+
+
+@router.get(
+    "/me/matches/{match_id}",
+    response_model=MatchDetailResponse,
+    summary="Детали конкретного PvP матча",
+    description=(
+        "Получить полную информацию о матче: соперник, задачи, результаты решений, "
+        "времена отправки ответов. "
+        "Доступно только участникам матча."
+    ),
+    tags=["match-history"],
+    responses={
+        404: {"description": "Матч не найден"},
+        403: {"description": "Доступ запрещён (вы не участник матча)"},
+    },
+)
+async def get_my_match_detail(
+    match_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MatchDetailResponse:
+    """
+    Получение деталей конкретного матча.
+
+    Требует проверки что пользователь является участником (player1 или player2).
+    """
+
+    # Проверить что матч существует и пользователь его участник
+    result = await db.execute(
+        select(Match).where(Match.id == match_id)
+    )
+    match = result.scalar_one_or_none()
+
+    if not match:
+        raise HTTPException(
+            status_code=404,
+            detail="Матч не найден"
+        )
+
+    if current_user.id not in (match.player1_id, match.player2_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Доступ запрещён: вы не участник этого матча"
+        )
+
+    return await get_match_detail(match_id, current_user.id, db)
