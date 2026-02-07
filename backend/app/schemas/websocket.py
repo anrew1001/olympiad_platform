@@ -115,6 +115,14 @@ class OpponentReconnectedEvent(BaseModel):
     timestamp: str = Field(..., description="Время переподключения (ISO format)")
 
 
+class DisconnectWarningEvent(BaseModel):
+    """Событие: предупреждение о скором форфейте соперника."""
+
+    type: str = Field("disconnect_warning", description="Тип события")
+    seconds_remaining: int = Field(..., description="Секунд до форфейта")
+    user_id: int = Field(..., description="ID отключенного игрока")
+
+
 class ReconnectionSuccessEvent(BaseModel):
     """Событие: вы успешно переподключились."""
 
@@ -122,6 +130,16 @@ class ReconnectionSuccessEvent(BaseModel):
     your_score: int = Field(..., description="Ваш текущий счёт")
     opponent_score: int = Field(..., description="Счёт соперника")
     time_elapsed: int = Field(..., description="Секунды с начала матча")
+    your_solved_tasks: List[int] = Field(
+        default_factory=list,
+        description="ID задач, которые вы решили"
+    )
+    opponent_solved_tasks: List[int] = Field(
+        default_factory=list,
+        description="ID задач, решенных соперником"
+    )
+    total_tasks: int = Field(5, description="Всего задач в матче")
+    reconnection_count: int = Field(0, description="Количество переподключений")
 
 
 class ErrorEvent(BaseModel):

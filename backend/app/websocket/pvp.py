@@ -23,7 +23,10 @@ from app.services.match_logic import (
     finalize_match,
     finalize_match_forfeit,
     handle_technical_error,
+    get_match_state,
+    activate_match,
 )
+from app.config import settings
 from app.websocket.manager import manager
 from app.schemas.websocket import (
     SubmitAnswerMessage,
@@ -35,6 +38,7 @@ from app.schemas.websocket import (
     MatchEndEvent,
     OpponentDisconnectedEvent,
     OpponentReconnectedEvent,
+    DisconnectWarningEvent,
     ReconnectionSuccessEvent,
     ErrorEvent,
     PingEvent,
@@ -49,7 +53,7 @@ router = APIRouter(prefix="/api/pvp", tags=["pvp-websocket"])
 # Heartbeat settings
 HEARTBEAT_INTERVAL = 30  # секунды
 HEARTBEAT_TIMEOUT = 30  # секунды
-DISCONNECT_TIMEOUT = 30  # секунды до форфейта при отключении
+# DISCONNECT_TIMEOUT загружается из config.DISCONNECT_TIMEOUT_SECONDS
 
 
 # ============================================================================
@@ -248,13 +252,14 @@ async def handle_message(
                     )
                     return
 
-                if match.status != MatchStatus.ACTIVE:
+                # Allow WAITING (waiting for both players) and ACTIVE (both connected) statuses
+                if match.status not in (MatchStatus.WAITING, MatchStatus.ACTIVE):
                     await manager.send_personal(
                         match_id,
                         user_id,
                         ErrorEvent(
-                            message="Match is not active",
-                            code="MATCH_NOT_ACTIVE",
+                            message="Match is not available",
+                            code="MATCH_NOT_AVAILABLE",
                         ).model_dump(),
                     )
                     return
@@ -465,9 +470,11 @@ async def websocket_endpoint(
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
-        # Проверить что матч active
-        if match.status != MatchStatus.ACTIVE:
-            await send_error(websocket, "Match is not active", "MATCH_NOT_ACTIVE")
+        # Проверить что матч в состоянии WAITING или ACTIVE (но не ERROR/FINISHED)
+        # WAITING = ожидаем второго игрока
+        # ACTIVE = оба подключены или один переподключился
+        if match.status not in (MatchStatus.WAITING, MatchStatus.ACTIVE):
+            await send_error(websocket, "Match is not available", "MATCH_NOT_AVAILABLE")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
@@ -497,21 +504,48 @@ async def websocket_endpoint(
                     ).model_dump(),
                 )
 
-                # Send reconnection success to this player with current scores
+                # Get complete match state for full reconnection sync
                 async with async_session_maker() as session:
-                    result = await session.execute(
-                        select(Match).where(Match.id == match_id)
-                    )
-                    match_data = result.scalar_one_or_none()
-                    if match_data:
-                        time_elapsed = int((datetime.utcnow() - match_data.created_at).total_seconds())
+                    try:
+                        match_state = await get_match_state(match_id, session)
+
+                        # Determine which player is reconnecting
+                        is_player1 = (user.id == match_state["player1_id"])
+
+                        your_score = match_state["player1_score"] if is_player1 else match_state["player2_score"]
+                        opponent_score = match_state["player2_score"] if is_player1 else match_state["player1_score"]
+                        your_solved = match_state["player1_solved_tasks"] if is_player1 else match_state["player2_solved_tasks"]
+                        opponent_solved = match_state["player2_solved_tasks"] if is_player1 else match_state["player1_solved_tasks"]
+
+                        # Get reconnection count from manager
+                        reconnection_count = manager.get_reconnection_count(match_id, user.id)
+
                         await manager.send_personal(
                             match_id,
                             user.id,
                             ReconnectionSuccessEvent(
-                                your_score=match_data.player1_score if user.id == match_data.player1_id else match_data.player2_score,
-                                opponent_score=match_data.player2_score if user.id == match_data.player1_id else match_data.player1_score,
-                                time_elapsed=time_elapsed,
+                                your_score=your_score,
+                                opponent_score=opponent_score,
+                                time_elapsed=match_state["time_elapsed"],
+                                your_solved_tasks=your_solved,
+                                opponent_solved_tasks=opponent_solved,
+                                total_tasks=match_state["total_tasks"],
+                                reconnection_count=reconnection_count,
+                            ).model_dump(),
+                        )
+                        logger.debug(
+                            f"Reconnection success event sent to user {user.id}: "
+                            f"your_score={your_score}, opponent_score={opponent_score}, "
+                            f"solved={len(your_solved)}/{match_state['total_tasks']}"
+                        )
+                    except Exception as e:
+                        logger.error(f"Error sending reconnection_success: {e}")
+                        await manager.send_personal(
+                            match_id,
+                            user.id,
+                            ErrorEvent(
+                                message="Failed to sync match state",
+                                code="STATE_SYNC_ERROR"
                             ).model_dump(),
                         )
 
@@ -550,7 +584,7 @@ async def websocket_endpoint(
                     ).model_dump(),
                 )
 
-        # 6. If both connected -> send match_start to both
+        # 6. If both connected -> activate match and send match_start to both
         if manager.is_both_connected(match_id):
             # Load tasks
             _, tasks_info = await load_match_with_tasks(match_id, async_session_maker())
@@ -561,6 +595,15 @@ async def websocket_endpoint(
                 match_id,
                 match_start_event.model_dump(),
             )
+
+            # Activate match (WAITING -> ACTIVE)
+            async with async_session_maker() as session:
+                try:
+                    await activate_match(match_id, session)
+                    await session.commit()
+                except Exception as e:
+                    logger.error(f"Error activating match {match_id}: {e}")
+
             logger.info(f"Match {match_id} started (both players connected)")
 
         # 7. Start heartbeat task
@@ -616,9 +659,16 @@ async def websocket_endpoint(
 
                 # Case 2: Only this player disconnected - start timeout for reconnection
                 elif opponent_id and manager.is_connected(match_id, opponent_id):
+                    # Check for flapping and apply penalty if detected
+                    is_flapping, penalty = manager.check_flapping(match_id, user.id)
+
+                    # Adjust timeout if flapping detected
+                    timeout = settings.DISCONNECT_TIMEOUT_SECONDS - penalty
+
                     logger.info(
                         f"User {user.id} disconnected from match {match_id}, "
-                        f"opponent {opponent_id} still connected. Starting {DISCONNECT_TIMEOUT}s timeout."
+                        f"opponent {opponent_id} still connected. Starting {timeout}s timeout "
+                        f"(flapping={is_flapping}, original={settings.DISCONNECT_TIMEOUT_SECONDS}s)"
                     )
 
                     # Define timeout callback for forfeit
@@ -656,11 +706,11 @@ async def websocket_endpoint(
                             except Exception as e:
                                 logger.error(f"Error in disconnect timeout: {e}")
 
-                    # Start timer
+                    # Start timer with adjusted timeout
                     await manager.start_disconnect_timer(
                         match_id,
                         user.id,
-                        DISCONNECT_TIMEOUT,
+                        timeout,
                         disconnect_timeout_callback,
                     )
 
@@ -671,13 +721,20 @@ async def websocket_endpoint(
                         OpponentDisconnectedEvent(
                             timestamp=datetime.utcnow().isoformat(),
                             reconnecting=True,
-                            timeout_seconds=DISCONNECT_TIMEOUT,
+                            timeout_seconds=timeout,
                         ).model_dump(),
                     )
                     logger.info(
                         f"Notified opponent {opponent_id} of user {user.id} disconnect "
-                        f"(reconnecting: True, timeout: {DISCONNECT_TIMEOUT}s)"
+                        f"(reconnecting: True, timeout: {timeout}s, flapping_penalty={penalty}s)"
                     )
+
+                    # Log flapping penalty if applied
+                    if is_flapping:
+                        logger.warning(
+                            f"Flapping penalty applied to user {user.id}: "
+                            f"timeout reduced from {settings.DISCONNECT_TIMEOUT_SECONDS}s to {timeout}s"
+                        )
 
             # Disconnect from ConnectionManager
             await manager.disconnect(match_id, user.id)

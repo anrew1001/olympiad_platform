@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from typing import Callable, Dict, Optional, Set
 
 from fastapi import WebSocket
@@ -284,7 +285,21 @@ class ConnectionManager:
                     # Отменить timeout таск
                     existing_session["disconnect_task"].cancel()
                     existing_session["disconnect_task"] = None
-                    logger.info(f"Player {user_id} reconnected to match {match_id}")
+
+                    # Отследить метрики переподключения
+                    reconnection_count = existing_session.get("reconnection_count", 0) + 1
+                    disconnect_duration = time.time() - existing_session.get("disconnect_time", time.time())
+
+                    existing_session["reconnection_count"] = reconnection_count
+                    existing_session["last_reconnect_time"] = time.time()
+
+                    # Расширенное логирование
+                    logger.info(
+                        f"RECONNECTION: user={user_id}, match={match_id}, "
+                        f"count={reconnection_count}, duration={disconnect_duration:.2f}s, "
+                        f"session={session_id[:8]}..."
+                    )
+
                     # Обновить websocket
                     self._rooms[match_id][user_id] = websocket
                     return True
@@ -302,9 +317,15 @@ class ConnectionManager:
             self._sessions[match_id][user_id] = {
                 "session_id": session_id,
                 "disconnect_task": None,
+                "reconnection_count": 0,
+                "connect_time": time.time(),
             }
 
-            logger.info(f"Player {user_id} connected to match {match_id} (new session)")
+            # Расширенное логирование
+            logger.info(
+                f"NEW CONNECTION: user={user_id}, match={match_id}, "
+                f"session={session_id[:8]}..."
+            )
             return False
 
     def cancel_disconnect_timer(self, match_id: int, user_id: int) -> bool:
@@ -337,10 +358,10 @@ class ConnectionManager:
         callback: Callable,
     ) -> None:
         """
-        Запускает таймер на отключение (30 сек для reconnection).
+        Запускает таймер на отключение с progressive warnings.
 
-        Если за timeout_seconds игрок не переподключится,
-        вызывает callback для forfeit логики.
+        Отправляет предупреждения соппоненту за N секунд до форфейта.
+        Если за timeout_seconds игрок не переподключится, вызывает callback.
 
         Args:
             match_id: ID матча
@@ -352,11 +373,53 @@ class ConnectionManager:
             logger.warning(f"No session for user {user_id} in match {match_id}")
             return
 
+        # Отследить когда произошло отключение
+        self._sessions[match_id][user_id]["disconnect_time"] = time.time()
+
         async def timeout_handler():
             try:
-                await asyncio.sleep(timeout_seconds)
+                from app.config import settings
+                from app.schemas.websocket import DisconnectWarningEvent
+
+                # Получить intervals для warnings из config
+                warning_intervals = sorted(
+                    [w for w in settings.DISCONNECT_WARNING_INTERVALS if w < timeout_seconds],
+                    reverse=True
+                )
+
+                elapsed = 0
+                for warning_time in warning_intervals:
+                    # Спать до времени warning
+                    sleep_duration = warning_time - elapsed
+                    if sleep_duration > 0:
+                        await asyncio.sleep(sleep_duration)
+                        elapsed = warning_time
+
+                        # Отправить warning соппоненту
+                        opponent_id = self.get_opponent_id(match_id, user_id)
+                        if opponent_id and self.is_connected(match_id, opponent_id):
+                            remaining = timeout_seconds - elapsed
+                            await self.send_personal(
+                                match_id,
+                                opponent_id,
+                                DisconnectWarningEvent(
+                                    seconds_remaining=remaining,
+                                    user_id=user_id,
+                                ).model_dump(),
+                            )
+                            logger.debug(
+                                f"Sent disconnect warning to user {opponent_id}: "
+                                f"{remaining}s remaining for user {user_id}"
+                            )
+
+                # Спать оставшееся время до timeout
+                final_sleep = timeout_seconds - elapsed
+                if final_sleep > 0:
+                    await asyncio.sleep(final_sleep)
+
                 logger.warning(f"Player {user_id} disconnect timeout in match {match_id}")
                 await callback()
+
             except asyncio.CancelledError:
                 logger.debug(f"Disconnect timer cancelled for player {user_id}")
 
@@ -421,6 +484,60 @@ class ConnectionManager:
         """
         if match_id in self._rate_limits and user_id in self._rate_limits[match_id]:
             del self._rate_limits[match_id][user_id]
+
+    def get_reconnection_count(self, match_id: int, user_id: int) -> int:
+        """
+        Возвращает количество переподключений для игрока.
+
+        Args:
+            match_id: ID матча
+            user_id: ID пользователя
+
+        Returns:
+            Количество переподключений (0 если нет переподключений)
+        """
+        if match_id in self._sessions and user_id in self._sessions[match_id]:
+            return self._sessions[match_id][user_id].get("reconnection_count", 0)
+        return 0
+
+    def check_flapping(self, match_id: int, user_id: int) -> tuple[bool, int]:
+        """
+        Проверяет флаппинг (частые переподключения).
+
+        Флаппинг - это когда игрок быстро отключается и переподключается,
+        что может быть признаком нестабильного соединения или попытки зла употребить.
+        Если обнаружен флаппинг, timeout сокращается на 50%.
+
+        Args:
+            match_id: ID матча
+            user_id: ID пользователя
+
+        Returns:
+            Кортеж (is_flapping, penalty_seconds):
+            - is_flapping: True если обнаружен флаппинг
+            - penalty_seconds: На сколько секунд сократить timeout (0 если не флаппинг)
+        """
+        from app.config import settings
+
+        if match_id not in self._sessions or user_id not in self._sessions[match_id]:
+            return False, 0
+
+        session_info = self._sessions[match_id][user_id]
+        reconnection_count = session_info.get("reconnection_count", 0)
+
+        # Проверить если переподключений >= max, это флаппинг
+        if reconnection_count >= settings.FLAPPING_MAX_DISCONNECTS:
+            # Вычислить штраф
+            penalty_seconds = int(
+                settings.DISCONNECT_TIMEOUT_SECONDS * settings.FLAPPING_PENALTY_MULTIPLIER
+            )
+            logger.warning(
+                f"FLAPPING DETECTED: user={user_id}, match={match_id}, "
+                f"count={reconnection_count}, penalty={penalty_seconds}s"
+            )
+            return True, penalty_seconds
+
+        return False, 0
 
     def total_connections(self) -> int:
         """Возвращает общее количество активных соединений."""

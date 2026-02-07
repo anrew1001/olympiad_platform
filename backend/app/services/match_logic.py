@@ -513,3 +513,115 @@ async def handle_technical_error(
         session,
         reason="technical_error",
     )
+
+
+async def get_match_state(
+    match_id: int,
+    session: AsyncSession,
+) -> dict:
+    """
+    Получает полное состояние матча для reconnection state_sync.
+
+    Используется для отправки полной информации о матче при переподключении игрока.
+    Включает счёты обоих игроков, список решённых задач и время матча.
+
+    Args:
+        match_id: ID матча
+        session: AsyncSession для БД операций
+
+    Returns:
+        Словарь с состоянием матча:
+        {
+            "player1_id": int,
+            "player2_id": int,
+            "player1_score": int,
+            "player2_score": int,
+            "player1_solved_tasks": [task_id, ...],
+            "player2_solved_tasks": [task_id, ...],
+            "total_tasks": int,
+            "time_elapsed": int (seconds),
+        }
+
+    Raises:
+        ValueError: Если матч не найден
+    """
+
+    # Получить информацию о матче
+    result = await session.execute(
+        select(Match).where(Match.id == match_id)
+    )
+    match = result.scalar_one_or_none()
+
+    if not match:
+        raise ValueError(f"Match {match_id} not found")
+
+    # Получить общее количество задач
+    result = await session.execute(
+        select(func.count(MatchTask.id)).where(MatchTask.match_id == match_id)
+    )
+    total_tasks = result.scalar() or 0
+
+    # Получить решённые задачи player1
+    result = await session.execute(
+        select(MatchAnswer.task_id).where(
+            (MatchAnswer.match_id == match_id)
+            & (MatchAnswer.user_id == match.player1_id)
+            & (MatchAnswer.is_correct == True)
+        )
+    )
+    player1_solved = [row[0] for row in result.all()]
+
+    # Получить решённые задачи player2
+    result = await session.execute(
+        select(MatchAnswer.task_id).where(
+            (MatchAnswer.match_id == match_id)
+            & (MatchAnswer.user_id == match.player2_id)
+            & (MatchAnswer.is_correct == True)
+        )
+    )
+    player2_solved = [row[0] for row in result.all()]
+
+    # Вычислить прошедшее время
+    time_elapsed = int((datetime.utcnow() - match.created_at).total_seconds())
+
+    logger.debug(
+        f"Match {match_id} state: P1={match.player1_score}, P2={match.player2_score}, "
+        f"time_elapsed={time_elapsed}s, total_tasks={total_tasks}"
+    )
+
+    return {
+        "player1_id": match.player1_id,
+        "player2_id": match.player2_id,
+        "player1_score": match.player1_score,
+        "player2_score": match.player2_score,
+        "player1_solved_tasks": player1_solved,
+        "player2_solved_tasks": player2_solved,
+        "total_tasks": total_tasks,
+        "time_elapsed": time_elapsed,
+    }
+
+
+async def activate_match(
+    match_id: int,
+    session: AsyncSession,
+) -> None:
+    """
+    Переводит матч из WAITING в ACTIVE статус.
+    Вызывается когда оба игрока подключены.
+
+    Args:
+        match_id: ID матча
+        session: Асинхронная сессия БД
+    """
+    result = await session.execute(
+        select(Match).where(Match.id == match_id).with_for_update()
+    )
+    match = result.scalar_one_or_none()
+
+    if not match:
+        raise ValueError(f"Match {match_id} not found")
+
+    if match.status == MatchStatus.WAITING:
+        match.status = MatchStatus.ACTIVE
+        await session.flush()
+        logger.info(f"Match {match_id} activated (status: WAITING → ACTIVE)")
