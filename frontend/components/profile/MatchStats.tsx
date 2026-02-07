@@ -1,6 +1,6 @@
 /**
  * MatchStats.tsx
- * Компонент для отображения статистики по матчам (W/L/D, win rate)
+ * Компонент для отображения статистики по матчам (W/L/D, win rate, серии побед)
  */
 
 "use client";
@@ -15,8 +15,8 @@ interface MatchStatsProps {
 export function MatchStats({ stats, loading }: MatchStatsProps) {
   if (loading) {
     return (
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-        {[...Array(5)].map((_, i) => (
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-7">
+        {[...Array(7)].map((_, i) => (
           <div
             key={i}
             className="h-20 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse"
@@ -34,7 +34,7 @@ export function MatchStats({ stats, loading }: MatchStatsProps) {
         Статистика матчей
       </h3>
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-7">
         {/* Всего матчей */}
         <div className="rounded-lg bg-gray-50 dark:bg-gray-700 p-4 text-center">
           <p className="text-sm text-gray-600 dark:text-gray-400">Всего матчей</p>
@@ -74,6 +74,61 @@ export function MatchStats({ stats, loading }: MatchStatsProps) {
             {winRatePercent.toFixed(1)}%
           </p>
         </div>
+
+        {/* Current Streak */}
+        <div
+          className={`rounded-lg p-4 text-center ${
+            stats.current_streak > 0
+              ? "bg-green-50 dark:bg-green-900/20"
+              : stats.current_streak < 0
+                ? "bg-red-50 dark:bg-red-900/20"
+                : "bg-gray-50 dark:bg-gray-700"
+          }`}
+        >
+          <p
+            className={`text-sm ${
+              stats.current_streak > 0
+                ? "text-green-600 dark:text-green-400"
+                : stats.current_streak < 0
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-gray-600 dark:text-gray-400"
+            }`}
+          >
+            Текущая серия
+          </p>
+          <p
+            className={`text-3xl font-bold ${
+              stats.current_streak > 0
+                ? "text-green-700 dark:text-green-400"
+                : stats.current_streak < 0
+                  ? "text-red-700 dark:text-red-400"
+                  : "text-gray-700 dark:text-gray-300"
+            }`}
+          >
+            {stats.current_streak > 0 && "+"}
+            {stats.current_streak}
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            {stats.current_streak > 0
+              ? `${stats.current_streak} ${pluralize(stats.current_streak, "победа", "победы", "побед")} подряд`
+              : stats.current_streak < 0
+                ? `${Math.abs(stats.current_streak)} ${pluralize(Math.abs(stats.current_streak), "поражение", "поражения", "поражений")} подряд`
+                : "Нет серии"}
+          </p>
+        </div>
+
+        {/* Best Win Streak */}
+        <div className="rounded-lg bg-purple-50 dark:bg-purple-900/20 p-4 text-center">
+          <p className="text-sm text-purple-600 dark:text-purple-400">Лучшая серия</p>
+          <p className="text-3xl font-bold text-purple-700 dark:text-purple-400">
+            {stats.best_win_streak}
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            {stats.best_win_streak > 0
+              ? `${stats.best_win_streak} ${pluralize(stats.best_win_streak, "победа", "победы", "побед")} подряд`
+              : "Нет побед"}
+          </p>
+        </div>
       </div>
 
       {/* Progress bar для win rate */}
@@ -97,4 +152,18 @@ export function MatchStats({ stats, loading }: MatchStatsProps) {
       )}
     </div>
   );
+}
+
+function pluralize(
+  count: number,
+  one: string,
+  few: string,
+  many: string
+): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+  return many;
 }

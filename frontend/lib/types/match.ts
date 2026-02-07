@@ -60,6 +60,12 @@ export interface RatingHistoryPoint {
   created_at: string; // ISO datetime
 }
 
+export interface TopicStats {
+  topic: string;
+  success_rate: number; // 0-100
+  attempts: number; // >= 3
+}
+
 export interface MatchStats {
   total_matches: number;
   won: number;
@@ -67,6 +73,10 @@ export interface MatchStats {
   draw: number;
   win_rate: number; // 0-100
   rating_history: RatingHistoryPoint[];
+  current_streak: number; // Положительное = побед, отрицательное = поражений
+  best_win_streak: number;
+  strongest_topics: TopicStats[];
+  weakest_topics: TopicStats[];
 }
 
 export type MatchStatus = "finished" | "active" | "cancelled" | "waiting" | "error";
