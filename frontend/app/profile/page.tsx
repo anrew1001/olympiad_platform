@@ -12,6 +12,7 @@ import type { MatchStats } from "@/lib/types/match";
 import { MatchHistoryList } from "@/components/profile/MatchHistoryList";
 import { MatchStats as MatchStatsComponent } from "@/components/profile/MatchStats";
 import { RatingChart } from "@/components/profile/RatingChart";
+import { TopicAnalysis } from "@/components/profile/TopicAnalysis";
 
 export default function ProfilePage() {
   const [stats, setStats] = useState<MatchStats | null>(null);
@@ -71,6 +72,22 @@ export default function ProfilePage() {
             <RatingChart data={stats.rating_history} />
           </div>
         )}
+
+        {/* Анализ по темам */}
+        {stats &&
+          (stats.strongest_topics.length > 0 ||
+            stats.weakest_topics.length > 0) && (
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                Анализ по темам
+              </h2>
+              <TopicAnalysis
+                strongestTopics={stats.strongest_topics}
+                weakestTopics={stats.weakest_topics}
+                loading={statsLoading}
+              />
+            </div>
+          )}
 
         {/* История матчей */}
         <div className="mb-8">

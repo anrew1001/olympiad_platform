@@ -136,6 +136,18 @@ class RatingHistoryPoint(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TopicStats(BaseModel):
+    """Статистика по одной теме для анализа сильных/слабых сторон"""
+
+    topic: str = Field(..., description="Название темы (например, 'algorithms', 'graphs')")
+    success_rate: float = Field(
+        ..., ge=0, le=100, description="Процент правильных ответов (0-100)"
+    )
+    attempts: int = Field(..., ge=3, description="Количество попыток (минимум 3)")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class MatchStatsResponse(BaseModel):
     """Общая статистика и история рейтинга пользователя"""
 
@@ -147,6 +159,26 @@ class MatchStatsResponse(BaseModel):
     rating_history: List[RatingHistoryPoint] = Field(
         default_factory=list,
         description="История рейтинга (последние 50 матчей в порядке возрастания даты)"
+    )
+    current_streak: int = Field(
+        default=0,
+        description=(
+            "Текущая серия результатов: "
+            "положительное = побед подряд, отрицательное = поражений подряд, 0 = нет серии"
+        ),
+    )
+    best_win_streak: int = Field(
+        default=0,
+        ge=0,
+        description="Максимальная серия побед за всё время",
+    )
+    strongest_topics: List[TopicStats] = Field(
+        default_factory=list,
+        description="Топ-3 темы с лучшим процентом правильных ответов",
+    )
+    weakest_topics: List[TopicStats] = Field(
+        default_factory=list,
+        description="Топ-3 темы с худшим процентом правильных ответов",
     )
 
     model_config = ConfigDict(from_attributes=True)

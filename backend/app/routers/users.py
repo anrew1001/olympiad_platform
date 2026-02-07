@@ -21,6 +21,7 @@ from app.services.match_history import (
     get_match_history,
     get_match_detail,
     get_match_stats,
+    get_detailed_match_stats,
 )
 from app.schemas.leaderboard import LeaderboardResponse
 from app.services.leaderboard import get_leaderboard
@@ -250,10 +251,11 @@ async def get_my_matches(
 @router.get(
     "/me/matches/stats",
     response_model=MatchStatsResponse,
-    summary="Статистика PvP матчей и история рейтинга",
+    summary="Детальная статистика PvP матчей",
     description=(
-        "Получить общую статистику по PvP матчам (W/L/D, win rate) "
-        "и историю изменения рейтинга за последние 50 матчей для графика."
+        "Получить полную статистику по PvP матчам: количество побед/поражений/ничьих, win rate, "
+        "текущую и лучшую серии побед, историю рейтинга за последние 50 матчей и анализ по темам "
+        "(сильные и слабые темы на основе процента правильных ответов)."
     ),
     tags=["match-history"],
 )
@@ -262,9 +264,15 @@ async def get_my_match_stats(
     db: AsyncSession = Depends(get_db),
 ) -> MatchStatsResponse:
     """
-    Получение статистики по PvP матчам и истории рейтинга.
+    Получение детальной статистики по PvP матчам с сериями побед и анализом тем.
+
+    Возвращает:
+    - Базовую статистику (W/L/D, win_rate, rating_history)
+    - Текущую серию побед/поражений
+    - Лучшую серию побед за всё время
+    - Сильные и слабые темы (топ-3 с минимум 3 попытками)
     """
-    return await get_match_stats(current_user.id, db)
+    return await get_detailed_match_stats(current_user.id, db)
 
 
 @router.get(
