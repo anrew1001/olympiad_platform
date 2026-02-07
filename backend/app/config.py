@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     POSTGRES_POOL_SIZE: int = 20
     POSTGRES_MAX_OVERFLOW: int = 10
 
+    # WebSocket reconnection settings
+    DISCONNECT_TIMEOUT_SECONDS: int = 30  # Grace period before forfeit
+    DISCONNECT_WARNING_INTERVALS: list[int] = [15, 10, 5]  # Warning times (seconds remaining)
+    FLAPPING_WINDOW_SECONDS: int = 60  # Time window to track disconnects
+    FLAPPING_MAX_DISCONNECTS: int = 3  # Max disconnects before penalty
+    FLAPPING_PENALTY_MULTIPLIER: float = 0.5  # Reduce timeout by 50% if flapping
+
     # Конфигурация для загрузки из .env файла
     model_config = SettingsConfigDict(
         env_file=".env",
