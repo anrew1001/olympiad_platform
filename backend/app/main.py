@@ -1,6 +1,8 @@
 import logging
+import os
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
 
 from app.database import init_db
@@ -17,6 +19,29 @@ app = FastAPI(
     description="API для олимпиадной платформы",
     version="1.0.0",
     default_response_class=ORJSONResponse,
+)
+
+
+# Конфигурация CORS
+# КРИТИЧЕСКИ ВАЖНО: CORS middleware должен быть ПЕРВЫМ (перед всеми другими)
+if os.getenv("ENVIRONMENT") == "production":
+    cors_origins = [
+        "https://your-production-domain.com",  # TODO: заменить на реальный домен
+    ]
+else:
+    # Development: разрешить localhost
+    cors_origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    max_age=600,  # Cache preflight requests for 10 minutes
 )
 
 

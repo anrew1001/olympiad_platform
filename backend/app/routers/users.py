@@ -22,6 +22,8 @@ from app.services.match_history import (
     get_match_detail,
     get_match_stats,
 )
+from app.schemas.leaderboard import LeaderboardResponse
+from app.services.leaderboard import get_leaderboard
 
 
 # API роутер для операций с пользователями
@@ -310,3 +312,50 @@ async def get_my_match_detail(
         )
 
     return await get_match_detail(match_id, current_user.id, db)
+
+
+# ============================================================================
+# Таблица лидеров
+# ============================================================================
+
+@router.get(
+    "/leaderboard",
+    response_model=LeaderboardResponse,
+    summary="Таблица лидеров",
+    description=(
+        "Получить топ N игроков по рейтингу с их статистикой побед. "
+        "Если текущий пользователь не входит в топ, его позиция возвращается отдельно. "
+        "Включены только пользователи с хотя бы одним завершённым матчем."
+    ),
+    tags=["leaderboard"],
+)
+async def get_leaderboard_endpoint(
+    limit: int = Query(
+        50,
+        ge=1,
+        le=100,
+        description="Количество записей для отображения (1-100, по умолчанию 50)"
+    ),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> LeaderboardResponse:
+    """
+    Получить таблицу лидеров.
+
+    Возвращает топ N пользователей, отсортированных по рейтингу (DESC),
+    с учётом количества побед как вспомогательного критерия.
+
+    Если текущий пользователь не входит в топ N, его статистика и позиция
+    возвращаются в поле current_user_entry.
+
+    Требует JWT аутентификации.
+
+    Args:
+        limit: Количество записей в топе (по умолчанию 50)
+        current_user: Текущий авторизованный пользователь
+        db: Асинхронная сессия БД
+
+    Returns:
+        LeaderboardResponse с топ пользователями и опциональной запись текущего пользователя
+    """
+    return await get_leaderboard(limit, current_user, db)
