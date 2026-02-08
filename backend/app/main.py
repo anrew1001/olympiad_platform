@@ -1,13 +1,14 @@
 import logging
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
 
 from app.database import init_db
 from app.routers import health_router, auth_router, tasks_router, users_router, admin_router, matches_router, pvp_router
 from app.websocket.pvp import router as websocket_router
+from app.routers.stats import router as stats_router
 
 
 # Логирование
@@ -45,6 +46,25 @@ app.add_middleware(
 )
 
 
+# Logging middleware для отладки CORS
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Логирует запросы и ответы для отладки CORS проблем."""
+    logger.info(f"🔵 Request: {request.method} {request.url.path}")
+    logger.info(f"   Origin: {request.headers.get('Origin', 'NO ORIGIN HEADER')}")
+    logger.info(f"   Headers: {dict(request.headers)}")
+
+    try:
+        response = await call_next(request)
+        logger.info(f"🟢 Response status: {response.status_code}")
+        logger.info(f"   CORS header: {response.headers.get('access-control-allow-origin', 'NO CORS HEADER')}")
+        logger.info(f"   All response headers: {dict(response.headers)}")
+        return response
+    except Exception as e:
+        logger.error(f"🔴 Exception in request handler: {e}", exc_info=True)
+        raise
+
+
 # Event handler при старте приложения
 @app.on_event("startup")
 async def startup_event() -> None:
@@ -70,4 +90,5 @@ app.include_router(users_router)
 app.include_router(admin_router)
 app.include_router(matches_router)
 app.include_router(pvp_router)
+app.include_router(stats_router)
 app.include_router(websocket_router)

@@ -1,6 +1,7 @@
 /**
  * MatchStats.tsx
  * Компонент для отображения статистики по матчам (W/L/D, win rate, серии побед)
+ * Cyberpunk стиль с угловыми срезами и неоновыми акцентами
  */
 
 "use client";
@@ -19,7 +20,10 @@ export function MatchStats({ stats, loading }: MatchStatsProps) {
         {[...Array(7)].map((_, i) => (
           <div
             key={i}
-            className="h-20 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse"
+            className="h-24 bg-[#1a1a1a] border border-[#333] animate-pulse"
+            style={{
+              clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+            }}
           />
         ))}
       </div>
@@ -28,102 +32,133 @@ export function MatchStats({ stats, loading }: MatchStatsProps) {
 
   const winRatePercent = stats.win_rate;
 
+  const statCards = [
+    {
+      label: 'ВСЕГО МАТЧЕЙ',
+      value: stats.total_matches,
+      color: '#666',
+      bgColor: '#1a1a1a',
+    },
+    {
+      label: 'ПОБЕДЫ',
+      value: stats.won,
+      color: '#00ff88',
+      bgColor: '#001a0f',
+    },
+    {
+      label: 'ПОРАЖЕНИЯ',
+      value: stats.lost,
+      color: '#ff3b30',
+      bgColor: '#1a0a0a',
+    },
+    {
+      label: 'НИЧЬИ',
+      value: stats.draw,
+      color: '#999',
+      bgColor: '#1a1a1a',
+    },
+    {
+      label: 'WIN RATE',
+      value: `${winRatePercent.toFixed(1)}%`,
+      color: '#0066FF',
+      bgColor: '#0a0f1a',
+    },
+  ];
+
+  // Текущая серия
+  const streakColor = stats.current_streak > 0 ? '#00ff88' : stats.current_streak < 0 ? '#ff3b30' : '#666';
+  const streakBg = stats.current_streak > 0 ? '#001a0f' : stats.current_streak < 0 ? '#1a0a0a' : '#1a1a1a';
+  const streakText = stats.current_streak > 0
+    ? `${stats.current_streak} ${pluralize(stats.current_streak, "победа", "победы", "побед")} подряд`
+    : stats.current_streak < 0
+    ? `${Math.abs(stats.current_streak)} ${pluralize(Math.abs(stats.current_streak), "поражение", "поражения", "поражений")} подряд`
+    : "Нет серии";
+
   return (
-    <div className="rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
-        Статистика матчей
-      </h3>
+    <div>
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-7 mb-6">
+        {/* Основные статы */}
+        {statCards.map((card, idx) => (
+          <div
+            key={idx}
+            className="relative p-4 border transition-all hover:brightness-110"
+            style={{
+              backgroundColor: card.bgColor,
+              borderColor: card.color + '40',
+              clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+            }}
+          >
+            {/* Corner bracket */}
+            <div
+              className="absolute top-0 right-0 w-2 h-2"
+              style={{
+                backgroundColor: card.color,
+                boxShadow: `0 0 8px ${card.color}`,
+              }}
+            />
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-7">
-        {/* Всего матчей */}
-        <div className="rounded-lg bg-gray-50 dark:bg-gray-700 p-4 text-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400">Всего матчей</p>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">
-            {stats.total_matches}
-          </p>
-        </div>
+            <p className="text-[10px] font-mono tracking-wider mb-2 uppercase" style={{ color: card.color }}>
+              {card.label}
+            </p>
+            <p className="text-3xl font-bold font-mono" style={{ color: card.color }}>
+              {card.value}
+            </p>
+          </div>
+        ))}
 
-        {/* Победы */}
-        <div className="rounded-lg bg-green-50 dark:bg-green-900/20 p-4 text-center">
-          <p className="text-sm text-green-600 dark:text-green-400">Победы</p>
-          <p className="text-3xl font-bold text-green-700 dark:text-green-400">
-            {stats.won}
-          </p>
-        </div>
-
-        {/* Поражения */}
-        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 text-center">
-          <p className="text-sm text-red-600 dark:text-red-400">Поражения</p>
-          <p className="text-3xl font-bold text-red-700 dark:text-red-400">
-            {stats.lost}
-          </p>
-        </div>
-
-        {/* Ничьи */}
-        <div className="rounded-lg bg-gray-100 dark:bg-gray-700 p-4 text-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400">Ничьи</p>
-          <p className="text-3xl font-bold text-gray-700 dark:text-gray-300">
-            {stats.draw}
-          </p>
-        </div>
-
-        {/* Win Rate */}
-        <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 p-4 text-center">
-          <p className="text-sm text-blue-600 dark:text-blue-400">Win Rate</p>
-          <p className="text-3xl font-bold text-blue-700 dark:text-blue-400">
-            {winRatePercent.toFixed(1)}%
-          </p>
-        </div>
-
-        {/* Current Streak */}
+        {/* Текущая серия */}
         <div
-          className={`rounded-lg p-4 text-center ${
-            stats.current_streak > 0
-              ? "bg-green-50 dark:bg-green-900/20"
-              : stats.current_streak < 0
-                ? "bg-red-50 dark:bg-red-900/20"
-                : "bg-gray-50 dark:bg-gray-700"
-          }`}
+          className="relative p-4 border transition-all hover:brightness-110"
+          style={{
+            backgroundColor: streakBg,
+            borderColor: streakColor + '40',
+            clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+          }}
         >
-          <p
-            className={`text-sm ${
-              stats.current_streak > 0
-                ? "text-green-600 dark:text-green-400"
-                : stats.current_streak < 0
-                  ? "text-red-600 dark:text-red-400"
-                  : "text-gray-600 dark:text-gray-400"
-            }`}
-          >
-            Текущая серия
+          <div
+            className="absolute top-0 right-0 w-2 h-2"
+            style={{
+              backgroundColor: streakColor,
+              boxShadow: `0 0 8px ${streakColor}`,
+            }}
+          />
+
+          <p className="text-[10px] font-mono tracking-wider mb-2 uppercase" style={{ color: streakColor }}>
+            СЕРИЯ
           </p>
-          <p
-            className={`text-3xl font-bold ${
-              stats.current_streak > 0
-                ? "text-green-700 dark:text-green-400"
-                : stats.current_streak < 0
-                  ? "text-red-700 dark:text-red-400"
-                  : "text-gray-700 dark:text-gray-300"
-            }`}
-          >
+          <p className="text-3xl font-bold font-mono" style={{ color: streakColor }}>
             {stats.current_streak > 0 && "+"}
             {stats.current_streak}
           </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            {stats.current_streak > 0
-              ? `${stats.current_streak} ${pluralize(stats.current_streak, "победа", "победы", "побед")} подряд`
-              : stats.current_streak < 0
-                ? `${Math.abs(stats.current_streak)} ${pluralize(Math.abs(stats.current_streak), "поражение", "поражения", "поражений")} подряд`
-                : "Нет серии"}
+          <p className="text-[9px] font-mono mt-1" style={{ color: streakColor + 'aa' }}>
+            {streakText}
           </p>
         </div>
 
-        {/* Best Win Streak */}
-        <div className="rounded-lg bg-purple-50 dark:bg-purple-900/20 p-4 text-center">
-          <p className="text-sm text-purple-600 dark:text-purple-400">Лучшая серия</p>
-          <p className="text-3xl font-bold text-purple-700 dark:text-purple-400">
+        {/* Лучшая серия */}
+        <div
+          className="relative p-4 border transition-all hover:brightness-110"
+          style={{
+            backgroundColor: '#0f0a1a',
+            borderColor: '#9966ff40',
+            clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+          }}
+        >
+          <div
+            className="absolute top-0 right-0 w-2 h-2"
+            style={{
+              backgroundColor: '#9966ff',
+              boxShadow: '0 0 8px #9966ff',
+            }}
+          />
+
+          <p className="text-[10px] font-mono tracking-wider mb-2 uppercase text-[#9966ff]">
+            ЛУЧШАЯ
+          </p>
+          <p className="text-3xl font-bold font-mono text-[#9966ff]">
             {stats.best_win_streak}
           </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-[9px] font-mono mt-1 text-[#9966ffaa]">
             {stats.best_win_streak > 0
               ? `${stats.best_win_streak} ${pluralize(stats.best_win_streak, "победа", "победы", "побед")} подряд`
               : "Нет побед"}
@@ -133,19 +168,29 @@ export function MatchStats({ stats, loading }: MatchStatsProps) {
 
       {/* Progress bar для win rate */}
       {stats.total_matches > 0 && (
-        <div className="mt-6">
+        <div
+          className="relative p-4 border border-[#0066FF]/20 bg-[#0a0f1a]"
+          style={{
+            clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+          }}
+        >
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Прогресс побед
+            <p className="text-xs font-mono tracking-wider uppercase text-[#0066FF]">
+              ПРОГРЕСС ПОБЕД
             </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-xs font-mono text-gray-400">
               {stats.won} из {stats.total_matches}
             </p>
           </div>
-          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
+
+          {/* Progress bar */}
+          <div className="relative w-full h-2 bg-[#1a1a1a] border border-[#333] overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full transition-all duration-300"
-              style={{ width: `${Math.min(winRatePercent, 100)}%` }}
+              className="h-full bg-gradient-to-r from-[#00ff88] to-[#0066FF] transition-all duration-500"
+              style={{
+                width: `${Math.min(winRatePercent, 100)}%`,
+                boxShadow: '0 0 10px rgba(0, 255, 136, 0.5)',
+              }}
             />
           </div>
         </div>

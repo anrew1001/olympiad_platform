@@ -30,7 +30,7 @@ export default function TaskDetailPage({
   const taskId = parseInt(idParam as string, 10);
   if (isNaN(taskId)) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[#121212] flex items-center justify-center p-4">
         <div className="text-center space-y-6">
           <h1 className="text-4xl font-bold text-[#ff0080]">⚠️ INVALID ID</h1>
           <p className="text-gray-400">Неверный ID задания</p>
@@ -60,7 +60,7 @@ export default function TaskDetailPage({
     null
   );
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Load task on mount
   useEffect(() => {
@@ -146,7 +146,7 @@ export default function TaskDetailPage({
 
   // === MAIN RENDER ===
   return (
-    <div className="min-h-screen bg-[#0a0a0a] relative overflow-hidden">
+    <div className="min-h-screen bg-[#121212] relative overflow-hidden">
       {/* Electrical field background */}
       <ElectricalFieldBackground />
 
@@ -345,7 +345,7 @@ function TaskText({ task }: TaskTextProps) {
       className="space-y-4 p-6"
       style={{
         border: "2px solid #0096c7",
-        background: "linear-gradient(135deg, #0a0a0a 0%, rgba(0, 150, 199, 0.02) 50%, rgba(100, 50, 150, 0.01) 100%)",
+        background: "linear-gradient(135deg, #121212 0%, rgba(0, 150, 199, 0.02) 50%, rgba(100, 50, 150, 0.01) 100%)",
         clipPath:
           "polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px))",
         boxShadow: "0 0 20px rgba(0, 150, 199, 0.15), inset 0 0 20px rgba(0, 150, 199, 0.03)",
@@ -449,7 +449,7 @@ interface AnswerFormProps {
   checkResult: TaskCheckResponse | null;
   onSubmit: (e: FormEvent) => void;
   onRetry: () => void;
-  inputRef: React.RefObject<HTMLInputElement>;
+  inputRef: React.RefObject<HTMLInputElement | null>;
 }
 
 function AnswerForm({
@@ -534,7 +534,7 @@ function AnswerForm({
       className="space-y-4 p-6"
       style={{
         border: "2px solid #0096c7",
-        background: "linear-gradient(135deg, #0a0a0a 0%, rgba(0, 150, 199, 0.02) 100%)",
+        background: "linear-gradient(135deg, #121212 0%, rgba(0, 150, 199, 0.02) 100%)",
         clipPath:
           "polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px))",
         boxShadow: "0 0 20px rgba(0, 150, 199, 0.15), inset 0 0 20px rgba(0, 150, 199, 0.03)",
@@ -555,7 +555,7 @@ function AnswerForm({
         value={answer}
         onChange={(e) => setAnswer(e.target.value)}
         disabled={submitting}
-        className="w-full h-12 px-4 bg-[#0a0a0a] text-white placeholder-gray-600 font-mono text-sm outline-none disabled:opacity-50 disabled:cursor-not-allowed transition"
+        className="w-full h-12 px-4 bg-[#121212] text-white placeholder-gray-600 font-mono text-sm outline-none disabled:opacity-50 disabled:cursor-not-allowed transition"
         style={{
           border: "2px solid #0096c7",
           boxShadow: "0 0 15px rgba(0, 150, 199, 0.3), inset 0 0 15px rgba(0, 150, 199, 0.08)",
@@ -684,7 +684,7 @@ function AnswerForm({
 
 function TaskDetailSkeleton() {
   return (
-    <div className="min-h-screen bg-[#0a0a0a] relative overflow-hidden">
+    <div className="min-h-screen bg-[#121212] relative overflow-hidden">
       <div className="fixed inset-0 opacity-[0.01] pointer-events-none -z-10">
         <div
           className="h-full w-full"
@@ -758,7 +758,7 @@ interface TaskNotFoundStateProps {
 
 function TaskNotFoundState({ error, router }: TaskNotFoundStateProps) {
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-[#121212] flex items-center justify-center p-4 relative overflow-hidden">
       <div className="fixed inset-0 opacity-[0.01] pointer-events-none -z-10">
         <div
           className="h-full w-full"

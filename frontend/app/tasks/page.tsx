@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { fetchTasks } from "@/lib/api/tasks";
@@ -35,7 +35,7 @@ const PARTICLE_POSITIONS = [
   { left: "60%", x1: "62%", x2: "58%", height: "104px", duration: 16, delay: 2.5 },
 ];
 
-export default function TacticalMissionBriefing() {
+function TacticalMissionBriefing() {
   const searchParams = useSearchParams();
 
   const [data, setData] = useState<PaginatedTaskResponse | null>(null);
@@ -73,7 +73,7 @@ export default function TacticalMissionBriefing() {
   }, [filters.subject, filters.difficulty, filters.page]);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] relative overflow-hidden">
+    <div className="min-h-screen bg-[#121212] relative overflow-hidden">
       {/* Tactical grid background */}
       <div className="fixed inset-0 opacity-[0.015] pointer-events-none">
         <motion.div
@@ -303,5 +303,14 @@ export default function TacticalMissionBriefing() {
         }}
       />
     </div>
+  );
+}
+
+// Обёрнутый компонент с Suspense для useSearchParams
+export default function TasksPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#121212]" />}>
+      <TacticalMissionBriefing />
+    </Suspense>
   );
 }

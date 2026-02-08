@@ -45,12 +45,21 @@ async def find_match(
     Транзакция уже открыта. Вызываем сервис, потом commit.
     После commit загружаем Match свежим SELECT для relationships.
     """
-    # Сервис выполняет guard, FOR UPDATE, flush, но НЕ commit
-    match = await find_or_create_match(
-        user_id=current_user.id,
-        user_rating=current_user.rating,   # rating загружен get_current_user
-        session=db,
-    )
+    try:
+        # Сервис выполняет guard, FOR UPDATE, flush, но НЕ commit
+        match = await find_or_create_match(
+            user_id=current_user.id,
+            user_rating=current_user.rating,   # rating загружен get_current_user
+            session=db,
+        )
+    except HTTPException:
+        # HTTPException (409 conflict, etc) should propagate directly
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.exception(f"Error in find_or_create_match: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
     # Коммитим всё: Match row + MatchTask rows (если match стал active)
     match_id = match.id
@@ -62,17 +71,19 @@ async def find_match(
         .where(Match.id == match_id)
         .options(joinedload(Match.player1), joinedload(Match.player2))
     )
-    match = result.unique().scalar_one()
+    match = result.scalar_one()  # Убрали unique() - оно ломает joinedload
 
     # Построение response: opponent зависит от статуса
     opponent = None
     if match.status == MatchStatus.ACTIVE:
         # Мы присоединились к матчу → мы player2, opponent = player1
-        opponent = OpponentInfo(
-            id=match.player1.id,
-            username=match.player1.username,
-            rating=match.player1.rating,
-        )
+        # Проверяем что player1 загружен
+        if match.player1:
+            opponent = OpponentInfo(
+                id=match.player1.id,
+                username=match.player1.username,
+                rating=match.player1.rating,
+            )
 
     return MatchResponse(
         match_id=match.id,

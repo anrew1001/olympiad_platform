@@ -7,7 +7,7 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
 import { ru } from "date-fns/locale";
 import { DIFFICULTY_COLORS } from "@/lib/constants/tasks";
@@ -94,7 +94,7 @@ export function RecentActivityList({ recentActivity, loading }: RecentActivityLi
     );
   }
 
-  const containerVariants = {
+  const containerVariants: any = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
@@ -105,7 +105,7 @@ export function RecentActivityList({ recentActivity, loading }: RecentActivityLi
     },
   };
 
-  const itemVariants = {
+  const itemVariants: any = {
     hidden: { opacity: 0, x: -20 },
     visible: {
       opacity: 1,

@@ -6,7 +6,7 @@
 
 "use client";
 
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
 import { ru } from "date-fns/locale";
 import type { AchievementItem } from "@/lib/types/stats";

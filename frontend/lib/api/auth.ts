@@ -29,16 +29,23 @@ export async function loginUser(credentials: LoginRequest): Promise<LoginRespons
     if (!response.ok) {
       const errorData: FastAPIError = await response.json();
 
+      // Преобразуем detail в строку (может быть string или array)
+      const errorMessage = typeof errorData.detail === 'string'
+        ? errorData.detail
+        : Array.isArray(errorData.detail)
+          ? errorData.detail[0]?.msg || 'Ошибка валидации'
+          : 'Неизвестная ошибка';
+
       // Backend возвращает "Неверный email или пароль" для 401
       if (response.status === 401) {
         throw new APIError(
-          errorData.detail || 'Неверный email или пароль',
+          errorMessage || 'Неверный email или пароль',
           401
         );
       }
 
       throw new APIError(
-        errorData.detail || 'Ошибка при входе',
+        errorMessage || 'Ошибка при входе',
         response.status
       );
     }
@@ -83,8 +90,13 @@ export async function getCurrentUser(): Promise<UserResponse> {
       }
 
       const errorData: FastAPIError = await response.json();
+      const errorMessage = typeof errorData.detail === 'string'
+        ? errorData.detail
+        : Array.isArray(errorData.detail)
+          ? errorData.detail[0]?.msg || 'Ошибка валидации'
+          : 'Неизвестная ошибка';
       throw new APIError(
-        errorData.detail || 'Ошибка при получении данных пользователя',
+        errorMessage || 'Ошибка при получении данных пользователя',
         response.status
       );
     }

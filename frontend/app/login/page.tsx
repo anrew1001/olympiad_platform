@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent, useEffect } from 'react';
+import { useState, FormEvent, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import { loginUser } from '@/lib/api/auth';
@@ -8,7 +8,7 @@ import { APIError } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import type { LoginRequest } from '@/types/auth';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, isAuthenticated, isLoading: authLoading } = useAuth();
@@ -67,7 +67,7 @@ export default function LoginPage() {
   };
 
   // Animation variants
-  const containerVariants = {
+  const containerVariants: any = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
@@ -78,23 +78,23 @@ export default function LoginPage() {
     },
   };
 
-  const itemVariants = {
+  const itemVariants: any = {
     hidden: { opacity: 0, y: 12 },
     visible: {
       opacity: 1,
       y: 0,
-      transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] },
+      transition: { duration: 0.35, ease: 'easeOut' },
     },
   };
 
-  const successVariants = {
+  const successVariants: any = {
     hidden: { scale: 0.85, opacity: 0 },
     visible: {
       scale: 1,
       opacity: 1,
       transition: {
         duration: 0.5,
-        ease: [0.34, 1.56, 0.64, 1],
+        ease: 'backOut',
       },
     },
   };
@@ -102,7 +102,7 @@ export default function LoginPage() {
   // Loading state during auth check
   if (authLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
+      <div className="flex min-h-screen items-center justify-center bg-[#121212]">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
@@ -115,7 +115,7 @@ export default function LoginPage() {
   // Success overlay with "match won" animation
   if (showSuccess) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a] relative overflow-hidden">
+      <div className="flex min-h-screen items-center justify-center bg-[#121212] relative overflow-hidden">
         {/* Radial pulse background */}
         <motion.div
           initial={{ scale: 0, opacity: 0.8 }}
@@ -191,7 +191,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a] relative overflow-hidden px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[#121212] relative overflow-hidden px-4">
       {/* Animated grid background */}
       <div className="absolute inset-0 opacity-[0.03]">
         <motion.div
@@ -474,5 +474,14 @@ export default function LoginPage() {
         </motion.div>
       </motion.div>
     </div>
+  );
+}
+
+// Обёрнутый компонент с Suspense для useSearchParams
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#121212]" />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

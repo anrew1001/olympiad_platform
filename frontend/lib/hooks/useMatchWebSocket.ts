@@ -1,0 +1,288 @@
+'use client';
+
+import { useEffect, useRef, useState, useCallback } from 'react';
+import type {
+  ConnectionState,
+  ServerEvent,
+  MatchState,
+  OpponentStatus,
+  PlayerInfo,
+  MatchTask,
+} from '@/lib/types/websocket';
+import { useWebSocket } from './useWebSocket';
+import { RateLimitedQueue, getWebSocketUrl } from '@/lib/utils/websocket';
+
+interface UseMatchWebSocketOptions {
+  matchId: number;
+  token: string;
+  yourPlayerId: number;
+  opponent: PlayerInfo | null;
+  initialTasks: MatchTask[];
+  onMatchEnd?: (result: MatchEndData) => void;
+}
+
+export interface MatchEndData {
+  outcome: 'victory' | 'defeat' | 'draw';
+  reason: 'completion' | 'forfeit' | 'technical_error';
+  ratingChange: number;
+  newRating: number;
+  finalScores: { player1_score: number; player2_score: number };
+}
+
+/**
+ * WebSocket хук для управления PvP матчем
+ * Обрабатывает: события, score updates, opponent tracking, rate limiting
+ */
+export function useMatchWebSocket({
+  matchId,
+  token,
+  yourPlayerId,
+  opponent,
+  initialTasks,
+  onMatchEnd,
+}: UseMatchWebSocketOptions) {
+  const [connectionState, setConnectionState] = useState<ConnectionState>({
+    status: 'disconnected',
+  });
+
+  const [matchState, setMatchState] = useState<MatchState>({
+    yourScore: 0,
+    opponentScore: 0,
+    yourSolvedTasks: new Set(),
+    opponentSolvedTasks: new Set(),
+    tasks: initialTasks,
+    timeElapsed: 0,
+    isFinished: false,
+  });
+
+  const [opponentStatus, setOpponentStatus] = useState<OpponentStatus>({
+    isConnected: opponent ? true : false,
+  });
+
+  const rateLimiterRef = useRef(new RateLimitedQueue(1000)); // 1/sec
+  const timeIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // === WebSocket Hook ===
+  // Не подключаемся пока нет токена (данные ещё не загружены)
+
+  const wsUrl = token ? getWebSocketUrl(matchId, token) : null;
+  const { state: wsState, sendMessage } = useWebSocket(wsUrl, {
+    onConnectionStateChange: setConnectionState,
+    onMessage: handleServerEvent,
+  });
+
+  // === Server Event Handler ===
+
+  function handleServerEvent(event: ServerEvent) {
+    console.log('[Match] Event:', event.type);
+
+    switch (event.type) {
+      case 'player_joined':
+        setOpponentStatus({ isConnected: true });
+        break;
+
+      case 'match_start':
+        setMatchState((prev) => ({ ...prev, tasks: event.tasks }));
+        startTimeCounter();
+        break;
+
+      case 'answer_result':
+        // Reconcile optimistic update with server response
+        setMatchState((prev) => ({
+          ...prev,
+          yourScore: event.your_score,
+          yourSolvedTasks: event.is_correct
+            ? new Set([...prev.yourSolvedTasks, event.task_id])
+            : prev.yourSolvedTasks,
+        }));
+        break;
+
+      case 'opponent_scored':
+        setMatchState((prev) => ({
+          ...prev,
+          opponentScore: event.opponent_score,
+          opponentSolvedTasks: new Set([...prev.opponentSolvedTasks, event.task_id]),
+        }));
+        break;
+
+      case 'match_end':
+        handleMatchEnd(event);
+        break;
+
+      case 'opponent_disconnected':
+        setOpponentStatus({
+          isConnected: false,
+          disconnectWarning: {
+            secondsRemaining: event.timeout_seconds,
+          },
+        });
+        startDisconnectCountdown(event.timeout_seconds);
+        break;
+
+      case 'opponent_reconnected':
+        setOpponentStatus({ isConnected: true });
+        break;
+
+      case 'disconnect_warning':
+        // Update countdown
+        setOpponentStatus((prev) => ({
+          ...prev,
+          disconnectWarning: {
+            secondsRemaining: event.seconds_remaining,
+          },
+        }));
+        break;
+
+      case 'reconnection_success':
+        // Sync state from server
+        setMatchState((prev) => ({
+          ...prev,
+          yourScore: event.your_score,
+          opponentScore: event.opponent_score,
+          timeElapsed: event.time_elapsed,
+          yourSolvedTasks: new Set(event.your_solved_tasks),
+          opponentSolvedTasks: new Set(event.opponent_solved_tasks),
+        }));
+        break;
+
+      case 'error':
+        console.error('[Match] Error:', event.message, event.code);
+        // Handle specific error codes
+        if (event.code === 'RATE_LIMITED') {
+          console.warn('Rate limited - please wait before submitting again');
+        }
+        break;
+
+      case 'ping':
+        // Auto-respond with pong
+        sendMessage({ type: 'pong', timestamp: event.timestamp });
+        break;
+
+      case 'pong':
+        // Handled by base useWebSocket
+        break;
+    }
+  }
+
+  // === Match End Handler ===
+
+  function handleMatchEnd(event: any) {
+    const yourRatingChange =
+      event.player1_rating_change !== undefined
+        ? event.player1_rating_change
+        : event.player2_rating_change;
+    const yourNewRating =
+      event.player1_new_rating !== undefined
+        ? event.player1_new_rating
+        : event.player2_new_rating;
+
+    const result: MatchEndData = {
+      outcome:
+        event.winner_id === yourPlayerId
+          ? 'victory'
+          : event.winner_id === null
+            ? 'draw'
+            : 'defeat',
+      reason: event.reason,
+      ratingChange: yourRatingChange,
+      newRating: yourNewRating,
+      finalScores: event.final_scores,
+    };
+
+    setMatchState((prev) => ({
+      ...prev,
+      isFinished: true,
+      result: {
+        outcome: result.outcome,
+        reason: result.reason,
+        ratingChange: result.ratingChange,
+        newRating: result.newRating,
+      },
+    }));
+
+    onMatchEnd?.(result);
+  }
+
+  // === Time Counter ===
+
+  function startTimeCounter() {
+    timeIntervalRef.current = setInterval(() => {
+      setMatchState((prev) => ({
+        ...prev,
+        timeElapsed: prev.timeElapsed + 1,
+      }));
+    }, 1000);
+  }
+
+  // === Disconnect Countdown ===
+
+  function startDisconnectCountdown(initialSeconds: number) {
+    let secondsLeft = initialSeconds;
+
+    const countdownInterval = setInterval(() => {
+      secondsLeft -= 1;
+      if (secondsLeft >= 0) {
+        setOpponentStatus((prev) => ({
+          ...prev,
+          disconnectWarning: {
+            secondsRemaining: secondsLeft,
+          },
+        }));
+      } else {
+        clearInterval(countdownInterval);
+      }
+    }, 1000);
+  }
+
+  // === Submit Answer ===
+
+  const submitAnswer = useCallback(
+    (taskId: number, answer: string) => {
+      if (!rateLimiterRef.current.canSend()) {
+        const waitTime = rateLimiterRef.current.getWaitTime();
+        console.warn(`Rate limited. Wait ${waitTime}ms before next submission`);
+        return false;
+      }
+
+      if (matchState.isFinished) {
+        console.warn('Match is finished');
+        return false;
+      }
+
+      if (wsState.status !== 'connected') {
+        console.warn('WebSocket not connected');
+        return false;
+      }
+
+      // Send to server
+      sendMessage({
+        type: 'submit_answer',
+        task_id: taskId,
+        answer,
+      });
+
+      return true;
+    },
+    [matchState.isFinished, wsState.status, sendMessage]
+  );
+
+  // === Cleanup ===
+
+  useEffect(() => {
+    return () => {
+      if (timeIntervalRef.current) {
+        clearInterval(timeIntervalRef.current);
+      }
+    };
+  }, []);
+
+  return {
+    connectionState,
+    matchState,
+    opponentStatus,
+    submitAnswer,
+    canSubmit:
+      wsState.status === 'connected' && rateLimiterRef.current.canSend() && !matchState.isFinished,
+    isReady: wsState.status === 'connected',
+  };
+}

@@ -1,6 +1,7 @@
 /**
  * TopicAnalysis.tsx
  * Компонент для отображения анализа сильных и слабых тем пользователя
+ * Cyberpunk стиль с неоновыми акцентами
  */
 
 "use client";
@@ -21,8 +22,18 @@ export function TopicAnalysis({
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
-        <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
+        <div
+          className="h-64 bg-[#1a1a1a] border border-[#333] animate-pulse"
+          style={{
+            clipPath: 'polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px))',
+          }}
+        />
+        <div
+          className="h-64 bg-[#1a1a1a] border border-[#333] animate-pulse"
+          style={{
+            clipPath: 'polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px))',
+          }}
+        />
       </div>
     );
   }
@@ -30,12 +41,17 @@ export function TopicAnalysis({
   // Если нет данных по темам
   if (strongestTopics.length === 0 && weakestTopics.length === 0) {
     return (
-      <div className="rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-8 text-center">
-        <p className="text-gray-600 dark:text-gray-400">
-          Недостаточно данных для анализа тем
+      <div
+        className="relative p-8 border border-[#333] bg-[#1a1a1a] text-center"
+        style={{
+          clipPath: 'polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px))',
+        }}
+      >
+        <p className="text-gray-500 font-mono text-sm tracking-wider">
+          НЕДОСТАТОЧНО ДАННЫХ ДЛЯ АНАЛИЗА
         </p>
-        <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">
-          Решите минимум 3 задачи по одной теме для отображения статистики
+        <p className="text-xs text-gray-600 font-mono mt-2">
+          Решите минимум 3 задачи по одной теме
         </p>
       </div>
     );
@@ -45,19 +61,23 @@ export function TopicAnalysis({
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       {/* Сильные темы */}
       <TopicColumn
-        title="Сильные темы"
+        title="СИЛЬНЫЕ ТЕМЫ"
         subtitle="Топ-3 по проценту правильных ответов"
         topics={strongestTopics}
-        colorScheme="green"
+        accentColor="#00ff88"
+        borderColor="#00ff8840"
+        bgColor="#001a0f"
         emptyMessage="Нет данных"
       />
 
       {/* Слабые темы */}
       <TopicColumn
-        title="Слабые темы"
+        title="СЛАБЫЕ ТЕМЫ"
         subtitle="Требуют дополнительной практики"
         topics={weakestTopics}
-        colorScheme="red"
+        accentColor="#ff3b30"
+        borderColor="#ff3b3040"
+        bgColor="#1a0a0a"
         emptyMessage="Нет данных"
       />
     </div>
@@ -68,7 +88,9 @@ interface TopicColumnProps {
   title: string;
   subtitle: string;
   topics: TopicStats[];
-  colorScheme: "green" | "red";
+  accentColor: string;
+  borderColor: string;
+  bgColor: string;
   emptyMessage: string;
 }
 
@@ -76,68 +98,69 @@ function TopicColumn({
   title,
   subtitle,
   topics,
-  colorScheme,
+  accentColor,
+  borderColor,
+  bgColor,
   emptyMessage,
 }: TopicColumnProps) {
-  const colors = {
-    green: {
-      bg: "bg-green-50 dark:bg-green-900/20",
-      border: "border-green-200 dark:border-green-700",
-      text: "text-green-700 dark:text-green-400",
-      progressBg: "bg-green-100 dark:bg-green-800/30",
-      progressBar: "bg-gradient-to-r from-green-400 to-green-600",
-    },
-    red: {
-      bg: "bg-red-50 dark:bg-red-900/20",
-      border: "border-red-200 dark:border-red-700",
-      text: "text-red-700 dark:text-red-400",
-      progressBg: "bg-red-100 dark:bg-red-800/30",
-      progressBar: "bg-gradient-to-r from-red-400 to-red-600",
-    },
-  };
-
-  const color = colors[colorScheme];
-
   return (
-    <div className={`rounded-lg ${color.bg} border ${color.border} p-6`}>
-      <h4 className={`text-lg font-semibold ${color.text} mb-1`}>
+    <div
+      className="relative p-6 border"
+      style={{
+        backgroundColor: bgColor,
+        borderColor: borderColor,
+        clipPath: 'polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px))',
+      }}
+    >
+      {/* Corner bracket */}
+      <div
+        className="absolute top-0 right-0 w-3 h-3"
+        style={{
+          backgroundColor: accentColor,
+          boxShadow: `0 0 10px ${accentColor}`,
+        }}
+      />
+
+      <h4 className="text-sm font-mono tracking-widest uppercase mb-1" style={{ color: accentColor }}>
         {title}
       </h4>
-      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{subtitle}</p>
+      <p className="text-xs font-mono text-gray-500 mb-6">{subtitle}</p>
 
       {topics.length === 0 ? (
-        <p className="text-gray-500 dark:text-gray-500 text-center py-8">
+        <p className="text-gray-600 font-mono text-xs text-center py-8">
           {emptyMessage}
         </p>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-5">
           {topics.map((topic, index) => (
             <div key={topic.topic}>
               <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className={`text-lg font-bold ${color.text}`}>
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-bold font-mono" style={{ color: accentColor }}>
                     #{index + 1}
                   </span>
-                  <span className="font-medium text-gray-900 dark:text-white">
+                  <span className="font-mono text-sm text-white">
                     {formatTopicName(topic.topic)}
                   </span>
                 </div>
-                <span className={`text-sm font-semibold ${color.text}`}>
+                <span className="text-sm font-bold font-mono" style={{ color: accentColor }}>
                   {topic.success_rate.toFixed(1)}%
                 </span>
               </div>
 
               {/* Progress bar */}
-              <div
-                className={`w-full ${color.progressBg} rounded-full h-2.5 overflow-hidden`}
-              >
+              <div className="relative w-full bg-[#1a1a1a] border border-[#333] h-2 overflow-hidden">
                 <div
-                  className={`h-full ${color.progressBar} rounded-full transition-all duration-300`}
-                  style={{ width: `${topic.success_rate}%` }}
+                  className="h-full transition-all duration-500"
+                  style={{
+                    width: `${topic.success_rate}%`,
+                    backgroundColor: accentColor,
+                    boxShadow: `0 0 8px ${accentColor}`,
+                  }}
                 />
               </div>
 
-              <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+              <p className="text-[10px] font-mono text-gray-600 mt-1">
                 {topic.attempts}{" "}
                 {pluralize(topic.attempts, "попытка", "попытки", "попыток")}
               </p>

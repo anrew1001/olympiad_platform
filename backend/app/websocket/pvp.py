@@ -307,6 +307,7 @@ async def handle_message(
 
                 # Проверить завершён ли матч
                 is_complete = await check_match_completion(match_id, session)
+                logger.info(f"Match {match_id} completion check after answer: is_complete={is_complete}")
 
                 if is_complete:
                     # Финализировать матч
@@ -644,21 +645,14 @@ async def websocket_endpoint(
             if match:
                 opponent_id = manager.get_opponent_id(match_id, user.id)
 
-                # Case 1: Check if BOTH players disconnected (technical error)
-                if opponent_id is None or not manager.is_connected(match_id, opponent_id):
-                    logger.warning(f"Both players disconnected from match {match_id}")
-                    async with async_session_maker() as session:
-                        try:
-                            await handle_technical_error(
-                                match_id, session,
-                                "Both players disconnected"
-                            )
-                            await session.commit()
-                        except Exception as e:
-                            logger.error(f"Error handling technical error for match {match_id}: {e}")
+                # Opponent никогда не подключался - просто cleanup, не technical error
+                if opponent_id is None:
+                    logger.info(f"User {user.id} disconnected from match {match_id}, opponent never connected")
+                    manager.disconnect(match_id, user.id)
 
-                # Case 2: Only this player disconnected - start timeout for reconnection
-                elif opponent_id and manager.is_connected(match_id, opponent_id):
+                # Opponent подключался - проверяем всё ли ещё подключён
+                elif manager.is_connected(match_id, opponent_id):
+                    # Case: Only this player disconnected - start timeout for reconnection
                     # Check for flapping and apply penalty if detected
                     is_flapping, penalty = manager.check_flapping(match_id, user.id)
 
@@ -736,6 +730,21 @@ async def websocket_endpoint(
                             f"timeout reduced from {settings.DISCONNECT_TIMEOUT_SECONDS}s to {timeout}s"
                         )
 
-            # Disconnect from ConnectionManager
-            await manager.disconnect(match_id, user.id)
+                # Case: Opponent тоже отключился (оба offline) - technical error
+                else:
+                    logger.warning(f"Both players disconnected from match {match_id}")
+                    manager.disconnect(match_id, user.id)
+                    async with async_session_maker() as session:
+                        try:
+                            await handle_technical_error(
+                                match_id, session,
+                                "Both players disconnected"
+                            )
+                            await session.commit()
+                        except Exception as e:
+                            logger.error(f"Error handling technical error for match {match_id}: {e}")
+
+            # Disconnect from ConnectionManager (если ещё не отключён)
+            if manager.is_connected(match_id, user.id):
+                await manager.disconnect(match_id, user.id)
             logger.info(f"Cleaned up user {user.id} from match {match_id}")

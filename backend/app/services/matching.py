@@ -202,6 +202,12 @@ async def select_match_tasks(
         task_result = await session.execute(task_stmt)
         task_ids = [row[0] for row in task_result.fetchall()]
 
+        if len(task_ids) < count:
+            logger.warning(
+                f"Not enough tasks for difficulty {low}-{high}: "
+                f"requested {count}, found {len(task_ids)}"
+            )
+
         for tid in task_ids:
             mt = MatchTask(
                 match_id=match_id,
@@ -268,6 +274,6 @@ async def cancel_waiting_match(
 
     # DELETE через ORM: session.delete() безопасен.
     # Waiting-матч не имеет child rows (tasks добавляются только при переходе в active).
-    await session.delete(match)
+    session.delete(match)
 
     return match_id
