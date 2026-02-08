@@ -152,7 +152,7 @@ class TaskCreate(BaseModel):
     @classmethod
     def validate_subject(cls, v: str) -> str:
         """Валидация subject против белого списка"""
-        allowed = ["informatics", "mathematics"]
+        allowed = ["informatics", "mathematics", "physics"]
         if v.lower() not in allowed:
             raise ValueError(f'subject должен быть одним из: {", ".join(allowed)}')
         return v.lower()
@@ -194,7 +194,7 @@ class TaskUpdate(BaseModel):
         """Валидация subject (только если передано)"""
         if v is None:
             return v
-        allowed = ["informatics", "mathematics"]
+        allowed = ["informatics", "mathematics", "physics"]
         if v.lower() not in allowed:
             raise ValueError(f'subject должен быть одним из: {", ".join(allowed)}')
         return v.lower()

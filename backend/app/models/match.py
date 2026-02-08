@@ -68,10 +68,10 @@ class Match(Base):
     )
 
     # Победитель матча (nullable, заполняется когда матч finished)
+    # Индекс определен явно в __table_args__ (ix_matches_winner_id)
     winner_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
     )
 
     # Изменение рейтинга для игрока 1 (после окончания матча)
