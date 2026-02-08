@@ -23,3 +23,28 @@ export interface FastAPIError {
     type: string;
   }>;
 }
+
+// Схемы для входа в систему
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: 'bearer';
+}
+
+// Состояние аутентификации
+export interface AuthState {
+  user: UserResponse | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+}
+
+// Тип контекста аутентификации
+export interface AuthContextType extends AuthState {
+  login: (token: string) => Promise<void>;
+  logout: () => void;
+  refreshUser: () => Promise<void>;
+}

@@ -1,94 +1,69 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, FormEvent, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
-import { registerUser, APIError } from '@/lib/api';
-import type { RegisterRequest } from '@/types/auth';
+import { loginUser } from '@/lib/api/auth';
+import { APIError } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
+import type { LoginRequest } from '@/types/auth';
 
-export default function RegisterPage() {
+export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { login, isAuthenticated, isLoading: authLoading } = useAuth();
 
   // Form state
-  const [formData, setFormData] = useState<RegisterRequest & { confirmPassword: string }>({
+  const [formData, setFormData] = useState<LoginRequest>({
     email: '',
-    username: '',
     password: '',
-    confirmPassword: '',
   });
 
   // UI state
-  const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
-  const [serverError, setServerError] = useState<string>('');
+  const [error, setError] = useState<string>('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const showRegisteredMessage = searchParams.get('registered') === 'true';
 
-  // Client-side validation
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.email.includes('@')) {
-      newErrors.email = 'Введите корректный email';
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      router.replace('/');
     }
-
-    if (formData.username.length < 3) {
-      newErrors.username = 'Минимум 3 символа';
-    }
-
-    if (formData.password.length < 6) {
-      newErrors.password = 'Минимум 6 символов';
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Пароли не совпадают';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+  }, [isAuthenticated, authLoading, router]);
 
   // Form submission
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setServerError('');
-
-    if (!validateForm()) {
-      return;
-    }
-
+    setError('');
     setIsLoading(true);
 
     try {
-      const { confirmPassword, ...registerData } = formData;
-      await registerUser(registerData);
+      const { access_token } = await loginUser(formData);
+      await login(access_token);
 
       setShowSuccess(true);
       setTimeout(() => {
-        router.push('/login?registered=true');
+        router.push('/');
       }, 1200);
-    } catch (error) {
-      if (error instanceof APIError) {
-        setServerError(error.message);
+    } catch (err) {
+      if (err instanceof APIError) {
+        setError(err.message);
       } else {
-        setServerError('Произошла непредвиденная ошибка');
+        setError('Произошла непредвиденная ошибка');
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Input change handler with error clearing
-  const handleChange = (field: keyof typeof formData) => (
+  // Input change handler
+  const handleChange = (field: keyof LoginRequest) => (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     setFormData({ ...formData, [field]: e.target.value });
-    if (errors[field]) {
-      setErrors({ ...errors, [field]: '' });
-    }
-    if (serverError) {
-      setServerError('');
-    }
+    if (error) setError('');
   };
 
   // Animation variants
@@ -124,7 +99,20 @@ export default function RegisterPage() {
     },
   };
 
-  // Success overlay
+  // Loading state during auth check
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+          className="h-10 w-10 rounded-full border-2 border-[#0066FF] border-t-transparent"
+        />
+      </div>
+    );
+  }
+
+  // Success overlay with "match won" animation
   if (showSuccess) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a] relative overflow-hidden">
@@ -195,7 +183,7 @@ export default function RegisterPage() {
             transition={{ delay: 0.5 }}
             className="text-2xl font-bold text-[#00ff88] font-mono tracking-wide"
           >
-            АККАУНТ СОЗДАН
+            ВХОД ВЫПОЛНЕН
           </motion.p>
         </motion.div>
       </div>
@@ -293,13 +281,33 @@ export default function RegisterPage() {
             </div>
           </div>
           <p className="text-sm text-[#666] mt-2 tracking-[0.2em] font-mono uppercase">
-            Присоединиться
+            Соревновательная арена
           </p>
         </motion.div>
 
-        {/* Server Error */}
+        {/* Registration Success Message */}
         <AnimatePresence>
-          {serverError && (
+          {showRegisteredMessage && (
+            <motion.div
+              initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+              animate={{ opacity: 1, height: 'auto', marginBottom: 24 }}
+              exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+              transition={{ duration: 0.3 }}
+              className="overflow-hidden"
+            >
+              <div className="relative border border-[#00ff88] bg-[#00ff88]/5 p-4">
+                <div className="absolute top-0 left-0 w-1 h-full bg-[#00ff88]" />
+                <p className="text-sm text-[#00ff88] font-mono pl-3">
+                  ✓ Регистрация успешна! Войдите в систему
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Error Message */}
+        <AnimatePresence>
+          {error && (
             <motion.div
               initial={{ opacity: 0, height: 0, marginBottom: 0 }}
               animate={{ opacity: 1, height: 'auto', marginBottom: 24 }}
@@ -310,7 +318,7 @@ export default function RegisterPage() {
               <div className="relative border border-[#ff3b30] bg-[#ff3b30]/5 p-4">
                 <div className="absolute top-0 left-0 w-1 h-full bg-[#ff3b30]" />
                 <p className="text-sm text-[#ff3b30] font-mono pl-3">
-                  ✗ {serverError}
+                  ✗ {error}
                 </p>
               </div>
             </motion.div>
@@ -320,7 +328,7 @@ export default function RegisterPage() {
         {/* Form */}
         <motion.form
           onSubmit={handleSubmit}
-          className="space-y-7"
+          className="space-y-8"
           variants={containerVariants}
         >
           {/* Email Field */}
@@ -358,50 +366,6 @@ export default function RegisterPage() {
                   />
                 )}
               </AnimatePresence>
-              {errors.email && (
-                <p className="text-xs text-[#ff3b30] mt-2 font-mono">{errors.email}</p>
-              )}
-            </div>
-          </motion.div>
-
-          {/* Username Field */}
-          <motion.div variants={itemVariants} className="relative group">
-            <label className="block text-xs text-[#666] mb-2 font-mono tracking-wider uppercase">
-              Ник
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={formData.username}
-                onChange={handleChange('username')}
-                onFocus={() => setFocusedField('username')}
-                onBlur={() => setFocusedField(null)}
-                placeholder="YourNickname"
-                disabled={isLoading}
-                required
-                className="h-14 w-full bg-transparent border-2 border-[#1a1a1a] px-4 text-white placeholder-[#444] font-mono text-sm outline-none transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{
-                  borderColor: focusedField === 'username' ? '#0066FF' : '#1a1a1a',
-                  boxShadow: focusedField === 'username'
-                    ? '0 0 30px rgba(0, 102, 255, 0.3), inset 0 0 20px rgba(0, 102, 255, 0.05)'
-                    : 'none',
-                }}
-              />
-              {/* Charging indicator */}
-              <AnimatePresence>
-                {focusedField === 'username' && (
-                  <motion.div
-                    initial={{ scaleX: 0 }}
-                    animate={{ scaleX: 1 }}
-                    exit={{ scaleX: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#0066FF] via-[#00d4ff] to-[#0066FF] origin-left"
-                  />
-                )}
-              </AnimatePresence>
-              {errors.username && (
-                <p className="text-xs text-[#ff3b30] mt-2 font-mono">{errors.username}</p>
-              )}
             </div>
           </motion.div>
 
@@ -440,50 +404,6 @@ export default function RegisterPage() {
                   />
                 )}
               </AnimatePresence>
-              {errors.password && (
-                <p className="text-xs text-[#ff3b30] mt-2 font-mono">{errors.password}</p>
-              )}
-            </div>
-          </motion.div>
-
-          {/* Confirm Password Field */}
-          <motion.div variants={itemVariants} className="relative group">
-            <label className="block text-xs text-[#666] mb-2 font-mono tracking-wider uppercase">
-              Подтвердить пароль
-            </label>
-            <div className="relative">
-              <input
-                type="password"
-                value={formData.confirmPassword}
-                onChange={handleChange('confirmPassword')}
-                onFocus={() => setFocusedField('confirmPassword')}
-                onBlur={() => setFocusedField(null)}
-                placeholder="••••••••"
-                disabled={isLoading}
-                required
-                className="h-14 w-full bg-transparent border-2 border-[#1a1a1a] px-4 text-white placeholder-[#444] font-mono text-sm outline-none transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{
-                  borderColor: focusedField === 'confirmPassword' ? '#0066FF' : '#1a1a1a',
-                  boxShadow: focusedField === 'confirmPassword'
-                    ? '0 0 30px rgba(0, 102, 255, 0.3), inset 0 0 20px rgba(0, 102, 255, 0.05)'
-                    : 'none',
-                }}
-              />
-              {/* Charging indicator */}
-              <AnimatePresence>
-                {focusedField === 'confirmPassword' && (
-                  <motion.div
-                    initial={{ scaleX: 0 }}
-                    animate={{ scaleX: 1 }}
-                    exit={{ scaleX: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#0066FF] via-[#00d4ff] to-[#0066FF] origin-left"
-                  />
-                )}
-              </AnimatePresence>
-              {errors.confirmPassword && (
-                <p className="text-xs text-[#ff3b30] mt-2 font-mono">{errors.confirmPassword}</p>
-              )}
             </div>
           </motion.div>
 
@@ -494,7 +414,7 @@ export default function RegisterPage() {
             disabled={isLoading}
             whileHover={{ scale: isLoading ? 1 : 1.02 }}
             whileTap={{ scale: isLoading ? 1 : 0.98 }}
-            className="group relative h-14 w-full border-2 border-[#0066FF] bg-[#0066FF]/10 text-white font-mono text-sm tracking-wider uppercase overflow-hidden disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-300 mt-2"
+            className="group relative h-14 w-full border-2 border-[#0066FF] bg-[#0066FF]/10 text-white font-mono text-sm tracking-wider uppercase overflow-hidden disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-300"
           >
             {/* Hover glow effect */}
             <motion.div
@@ -520,27 +440,27 @@ export default function RegisterPage() {
                     transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
                     className="h-4 w-4 rounded-full border-2 border-white border-t-transparent"
                   />
-                  Создание аккаунта...
+                  Подключение...
                 </>
               ) : (
                 <>
                   <span className="inline-block w-2 h-2 bg-[#0066FF] group-hover:bg-white transition-colors duration-300" />
-                  Присоединиться
+                  Войти в систему
                 </>
               )}
             </span>
           </motion.button>
         </motion.form>
 
-        {/* Login Link */}
+        {/* Register Link */}
         <motion.div variants={itemVariants} className="mt-8 text-center">
           <p className="text-sm text-[#666] font-mono">
-            Уже есть аккаунт?{' '}
+            Нет аккаунта?{' '}
             <a
-              href="/login"
+              href="/register"
               className="text-[#0066FF] hover:text-[#00d4ff] underline transition-colors duration-200"
             >
-              Войти
+              Зарегистрироваться
             </a>
           </p>
         </motion.div>
