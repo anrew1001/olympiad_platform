@@ -1,11 +1,7 @@
 /**
  * MatchCard.tsx
  * Карточка одного матча с основной информацией
- * - Результат (Победа/Поражение/Ничья)
- * - Данные соперника
- * - Счёт
- * - Изменение рейтинга
- * - Дата матча
+ * Cyberpunk стиль с неоновыми акцентами
  */
 
 "use client";
@@ -24,10 +20,10 @@ export function MatchCard({ match, onClick }: MatchCardProps) {
   const isDraw = match.result === "draw";
   const isLost = match.result === "lost";
 
-  // Определить цвет результата
-  const resultColor = isWon ? "bg-green-50 border-green-200" : isDraw ? "bg-gray-50 border-gray-200" : "bg-red-50 border-red-200";
-  const resultTextColor = isWon ? "text-green-700" : isDraw ? "text-gray-700" : "text-red-700";
-  const ratingChangeColor = (match.my_rating_change ?? 0) > 0 ? "text-green-600" : (match.my_rating_change ?? 0) < 0 ? "text-red-600" : "text-gray-600";
+  // Цвета в зависимости от результата
+  const resultColor = isWon ? "#00ff88" : isDraw ? "#999" : "#ff3b30";
+  const borderColor = isWon ? "#00ff8840" : isDraw ? "#99999940" : "#ff3b3040";
+  const bgColor = isWon ? "#001a0f" : isDraw ? "#1a1a1a" : "#1a0a0a";
 
   // Форматировать дату
   const finishedDate = match.finished_at
@@ -35,47 +31,72 @@ export function MatchCard({ match, onClick }: MatchCardProps) {
     : format(new Date(match.created_at), "dd MMM yyyy, HH:mm", { locale: ru });
 
   // Результат в виде строки
-  const resultLabel = isWon ? "Победа" : isDraw ? "Ничья" : "Поражение";
+  const resultLabel = isWon ? "ПОБЕДА" : isDraw ? "НИЧЬЯ" : "ПОРАЖЕНИЕ";
 
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left rounded-lg border ${resultColor} p-4 transition-all hover:shadow-md active:shadow-sm`}
+      className="w-full text-left relative border transition-all hover:brightness-110"
+      style={{
+        backgroundColor: bgColor,
+        borderColor: borderColor,
+        clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+      }}
     >
-      <div className="flex items-center justify-between gap-4">
+      {/* Corner bracket */}
+      <div
+        className="absolute top-0 right-0 w-2 h-2"
+        style={{
+          backgroundColor: resultColor,
+          boxShadow: `0 0 8px ${resultColor}`,
+        }}
+      />
+
+      <div className="p-4 flex items-center justify-between gap-4">
         {/* Левая часть: результат + дата */}
-        <div className="flex flex-col gap-1">
-          <span className={`inline-block w-fit rounded px-2 py-1 text-sm font-semibold ${resultTextColor}`}>
+        <div className="flex flex-col gap-2">
+          <span
+            className="inline-block w-fit px-3 py-1 text-[10px] font-mono font-bold tracking-wider"
+            style={{
+              color: resultColor,
+              backgroundColor: bgColor,
+              border: `1px solid ${resultColor}`,
+              clipPath: 'polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 4px 100%, 0 calc(100% - 4px))',
+            }}
+          >
             {resultLabel}
           </span>
-          <span className="text-xs text-gray-500">{finishedDate}</span>
+          <span className="text-[10px] font-mono text-gray-600">{finishedDate}</span>
         </div>
 
         {/* Центр: информация о сопернике и счёте */}
-        <div className="flex-1 flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-gray-900">{match.opponent.username}</p>
-              <p className="text-xs text-gray-600">Рейтинг: {match.opponent.rating}</p>
-            </div>
+        <div className="flex-1 flex items-center justify-between gap-6">
+          <div>
+            <p className="font-mono text-sm font-bold text-white">{match.opponent.username}</p>
+            <p className="text-[10px] font-mono text-gray-600">Рейтинг: {match.opponent.rating}</p>
+          </div>
 
-            <div className="text-center">
-              <p className="text-2xl font-bold text-gray-900">
-                {match.my_score} : {match.opponent_score}
-              </p>
-              <p className="text-xs text-gray-600">счёт</p>
-            </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold font-mono text-white">
+              {match.my_score} : {match.opponent_score}
+            </p>
+            <p className="text-[9px] font-mono text-gray-600 uppercase tracking-wider">счёт</p>
           </div>
         </div>
 
         {/* Правая часть: изменение рейтинга */}
         {match.my_rating_change !== null && (
           <div className="flex flex-col items-end gap-1">
-            <p className={`text-xl font-bold ${ratingChangeColor}`}>
+            <p
+              className="text-xl font-bold font-mono"
+              style={{
+                color: match.my_rating_change > 0 ? "#00ff88" : match.my_rating_change < 0 ? "#ff3b30" : "#999",
+              }}
+            >
               {match.my_rating_change > 0 ? "+" : ""}
               {match.my_rating_change}
             </p>
-            <p className="text-xs text-gray-600">рейтинг</p>
+            <p className="text-[9px] font-mono text-gray-600 uppercase tracking-wider">рейтинг</p>
           </div>
         )}
       </div>

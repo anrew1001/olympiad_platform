@@ -55,3 +55,31 @@ export async function fetchUserStats(): Promise<UserStatsResponse> {
   const data = await response.json();
   return data as UserStatsResponse;
 }
+
+/**
+ * Публичная статистика платформы
+ */
+export interface PublicStats {
+  total_tasks: number;
+  total_users: number;
+  total_matches: number;
+  active_matches: number;
+}
+
+/**
+ * Получить публичную статистику платформы (без авторизации)
+ */
+export async function getPublicStats(): Promise<PublicStats> {
+  const response = await fetch(`${API_BASE}/api/stats/public`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch public stats');
+  }
+
+  return response.json();
+}

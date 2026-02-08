@@ -94,3 +94,12 @@ export const DIFFICULTY_OPTIONS = [
   { value: "4", label: "✦ ПРОФИ" },
   { value: "5", label: "✧ ЛЕГЕНДА" },
 ];
+
+// Helper функции для PvP компонентов
+export function getDifficultyColor(difficulty: number): string {
+  return DIFFICULTY_COLORS[difficulty as keyof typeof DIFFICULTY_COLORS]?.hex || "#666";
+}
+
+export function getDifficultyLabel(difficulty: number): string {
+  return DIFFICULTY_COLORS[difficulty as keyof typeof DIFFICULTY_COLORS]?.label || "НЕИЗВЕСТНО";
+}

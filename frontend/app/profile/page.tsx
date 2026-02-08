@@ -58,6 +58,19 @@ export default function ProfilePage() {
         setStatsError(
           err instanceof Error ? err.message : "Ошибка при загрузке статистики"
         );
+        // Fallback: пустая статистика вместо null (чтобы компоненты не ломались)
+        setStats({
+          total_matches: 0,
+          won: 0,
+          lost: 0,
+          draw: 0,
+          win_rate: 0,
+          current_streak: 0,
+          best_win_streak: 0,
+          rating_history: [],
+          strongest_topics: [],
+          weakest_topics: [],
+        });
       } finally {
         setStatsLoading(false);
       }
@@ -91,7 +104,7 @@ export default function ProfilePage() {
   // Показать loading пока проверяется auth
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
         <div className="text-cyan-400 font-mono tracking-wider">ИНИЦИАЛИЗАЦИЯ...</div>
       </div>
     );
@@ -103,7 +116,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] py-12 relative overflow-hidden">
+    <div className="min-h-screen bg-[#121212] py-12 relative overflow-hidden">
       {/* CRT scanline overlay */}
       <div
         className="fixed inset-0 pointer-events-none opacity-[0.015] z-0"

@@ -6,7 +6,7 @@
 
 "use client";
 
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { DIFFICULTY_COLORS } from "@/lib/constants/tasks";
 import type { DifficultyStats } from "@/lib/types/stats";
 
@@ -45,7 +45,7 @@ export function DifficultyBreakdown({ byDifficulty, loading }: DifficultyBreakdo
     );
   }
 
-  const containerVariants = {
+  const containerVariants: any = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
@@ -56,7 +56,7 @@ export function DifficultyBreakdown({ byDifficulty, loading }: DifficultyBreakdo
     },
   };
 
-  const itemVariants = {
+  const itemVariants: any = {
     hidden: { opacity: 0, x: -20 },
     visible: {
       opacity: 1,

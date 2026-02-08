@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { JetBrains_Mono, Sora } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
+import { LayoutContent } from "@/components/layout/LayoutContent";
 
 const sora = Sora({
   variable: "--font-sans",
@@ -31,7 +32,9 @@ export default function RootLayout({
         className={`${sora.variable} ${jetbrainsMono.variable} antialiased`}
       >
         <AuthProvider>
-          {children}
+          <LayoutContent>
+            {children}
+          </LayoutContent>
         </AuthProvider>
       </body>
     </html>
