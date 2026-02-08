@@ -31,3 +31,19 @@ export interface TaskFilters {
   page?: number;
   per_page?: number;
 }
+
+/**
+ * Запрос на проверку ответа к заданию
+ */
+export interface TaskCheckRequest {
+  answer: string;
+}
+
+/**
+ * Ответ от API при проверке ответа на задание
+ */
+export interface TaskCheckResponse {
+  is_correct: boolean;
+  message: string;
+  correct_answer: string | null; // null если ответ правильный
+}
