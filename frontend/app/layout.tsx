@@ -5,13 +5,13 @@ import { AuthProvider } from "@/context/AuthContext";
 
 const sora = Sora({
   variable: "--font-sans",
-  subsets: ["latin", "cyrillic"],
+  subsets: ["latin"],
   display: 'swap',
 });
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-mono",
-  subsets: ["latin", "cyrillic"],
+  subsets: ["latin"],
   display: 'swap',
 });
 

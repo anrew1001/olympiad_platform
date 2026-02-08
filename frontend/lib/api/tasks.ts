@@ -2,7 +2,7 @@
  * API клиент для тактической системы миссий
  */
 
-import type { PaginatedTaskResponse, TaskFilters, TaskDetail } from "@/lib/types/task";
+import type { PaginatedTaskResponse, TaskFilters, TaskDetail, TaskCheckResponse } from "@/lib/types/task";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -69,6 +69,45 @@ export async function fetchTaskDetail(taskId: number): Promise<TaskDetail> {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Ошибка при загрузке миссии: ${response.statusText}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Проверить ответ на задание
+ *
+ * POST /api/tasks/{id}/check
+ * Требует JWT авторизации
+ */
+export async function checkAnswer(
+  taskId: number,
+  answer: string
+): Promise<TaskCheckResponse> {
+  const response = await fetch(`${API_BASE}/api/tasks/${taskId}/check`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ answer }),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      // Токен истёк - очистить localStorage и редирект на логин
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("access_token");
+        window.location.href = "/login";
+      }
+      throw new Error("Требуется авторизация");
+    }
+
+    if (response.status === 404) {
+      throw new Error("Задание не найдено");
+    }
+
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      errorData.detail || `Ошибка при проверке ответа: ${response.statusText}`
     );
   }
 
