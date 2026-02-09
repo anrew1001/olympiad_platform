@@ -79,6 +79,11 @@ export default function AdminTasksPage() {
     }
   };
 
+  // Обёртка для handleCreate с правильным типом для формы
+  const handleCreateWrapper = async (data: TaskCreate | TaskUpdate) => {
+    await handleCreate(data as TaskCreate);
+  };
+
   // Обновить задачу
   const handleUpdate = async (taskId: number, data: TaskUpdate) => {
     setFormLoading(true);
@@ -91,6 +96,13 @@ export default function AdminTasksPage() {
       alert(err instanceof Error ? err.message : "Ошибка обновления");
     } finally {
       setFormLoading(false);
+    }
+  };
+
+  // Обёртка для handleUpdate с правильным типом для формы
+  const handleUpdateWrapper = async (data: TaskCreate | TaskUpdate) => {
+    if (editingTask) {
+      await handleUpdate(editingTask.id, data as TaskUpdate);
     }
   };
 
@@ -161,7 +173,7 @@ export default function AdminTasksPage() {
         {showForm && (
           <TaskForm
             task={editingTask}
-            onSubmit={editingTask ? (data) => handleUpdate(editingTask.id, data) : handleCreate}
+            onSubmit={editingTask ? handleUpdateWrapper : handleCreateWrapper}
             onCancel={() => {
               setShowForm(false);
               setEditingTask(null);

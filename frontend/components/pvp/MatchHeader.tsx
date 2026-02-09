@@ -67,27 +67,27 @@ export function MatchHeader({
 
           {/* Center - Score & Timer */}
           <div className="text-center space-y-4">
-            {/* Score - Enhanced Visual */}
+            {/* Score - Clean & Consistent */}
             <motion.div
-              className="relative py-4"
+              className="relative py-3"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.1 }}
             >
-              <div className="flex justify-center items-baseline gap-4">
+              <div className="flex justify-center items-center gap-6">
                 {/* Left score */}
                 <motion.div
                   className="text-center"
                   key={`score1-${score1}`}
-                  initial={{ scale: 1.3, opacity: 0 }}
+                  initial={{ scale: 1.2, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  transition={{ duration: 0.4, ease: 'easeOut' }}
+                  transition={{ duration: 0.3, ease: 'easeOut' }}
                 >
                   <motion.span
-                    className="text-6xl font-mono font-bold block"
+                    className="text-5xl font-mono font-black block"
                     style={{
-                      color: '#0066FF',
-                      textShadow: '0 0 30px rgba(0, 102, 255, 0.9), 0 0 60px rgba(0, 102, 255, 0.4)',
+                      color: '#00d4ff',
+                      textShadow: '0 0 15px rgba(0, 212, 255, 0.5)',
                     }}
                   >
                     {score1}
@@ -95,29 +95,23 @@ export function MatchHeader({
                 </motion.div>
 
                 {/* Divider */}
-                <motion.div
-                  className="flex flex-col items-center gap-1"
-                  animate={{ opacity: [0.5, 1, 0.5] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                >
-                  <div className="w-1 h-6 bg-[#0066FF]/40 rounded-full" />
-                  <span className="text-xl font-mono text-[#0066FF]/60">—</span>
-                  <div className="w-1 h-6 bg-[#0066FF]/40 rounded-full" />
-                </motion.div>
+                <div className="flex flex-col items-center">
+                  <span className="text-2xl font-mono text-[#0066FF]/60">—</span>
+                </div>
 
                 {/* Right score */}
                 <motion.div
                   className="text-center"
                   key={`score2-${score2}`}
-                  initial={{ scale: 1.3, opacity: 0 }}
+                  initial={{ scale: 1.2, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  transition={{ duration: 0.4, ease: 'easeOut' }}
+                  transition={{ duration: 0.3, ease: 'easeOut' }}
                 >
                   <motion.span
-                    className="text-6xl font-mono font-bold block"
+                    className="text-5xl font-mono font-black block"
                     style={{
-                      color: '#0066FF',
-                      textShadow: '0 0 30px rgba(0, 102, 255, 0.9), 0 0 60px rgba(0, 102, 255, 0.4)',
+                      color: '#00d4ff',
+                      textShadow: '0 0 15px rgba(0, 212, 255, 0.5)',
                     }}
                   >
                     {score2}

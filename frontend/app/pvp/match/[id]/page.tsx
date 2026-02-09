@@ -221,7 +221,7 @@ export default function PvPMatchPage() {
   // === Render ===
 
   return (
-    <div className="min-h-screen bg-[#121212] relative overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden" style={{ backgroundColor: '#121212' }}>
       {/* Electrical field background */}
       <div className="fixed inset-0 pointer-events-none -z-10">
         {/* Subtle glow animation */}
@@ -229,7 +229,7 @@ export default function PvPMatchPage() {
           <motion.div
             key={i}
             animate={{
-              opacity: [0, 0.015, 0],
+              opacity: [0, 0.012, 0],
               scale: [1, 1.1, 1],
             }}
             transition={{
@@ -244,7 +244,7 @@ export default function PvPMatchPage() {
               height: '250px',
               left: `${15 + i * 35}%`,
               top: `${5 + i * 25}%`,
-              background: `radial-gradient(circle, rgba(0, 150, 199, 0.15) 0%, transparent 70%)`,
+              background: `radial-gradient(circle, rgba(0, 150, 199, 0.12) 0%, transparent 70%)`,
               filter: 'blur(50px)',
             }}
           />
@@ -264,6 +264,14 @@ export default function PvPMatchPage() {
           }}
         />
       </div>
+
+      {/* Scanlines overlay для атмосферы */}
+      <div
+        className="fixed inset-0 pointer-events-none -z-10 opacity-[0.015]"
+        style={{
+          backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 212, 255, 0.02) 2px, rgba(0, 212, 255, 0.02) 4px)',
+        }}
+      />
 
       {/* Connection status */}
       <ConnectionStatus state={connectionState} />

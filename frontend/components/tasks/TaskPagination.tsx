@@ -101,7 +101,7 @@ export function TaskPagination({
               <div className="w-1.5 h-1.5 bg-[#00ff88]/30" />
             </motion.div>
             <div className="font-mono text-sm">
-              <span className="text-gray-500">КООРДИНАТЫ:</span>{" "}
+              <span className="text-gray-500">ЗАДАНИЯ:</span>{" "}
               <span className="text-white font-semibold">{itemsStart}–{itemsEnd}</span>
               <span className="text-gray-600"> / </span>
               <span className="text-gray-400">{totalItems}</span>
