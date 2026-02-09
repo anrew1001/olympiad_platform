@@ -39,7 +39,7 @@ Olympeit — это веб-платформа для практики и сор�
 - Python 3.12+
 - Node.js 18+
 - PostgreSQL 14+
-- Docker (для локального PostgreSQL)
+- Docker Desktop ([Скачать](https://www.docker.com/products/docker-desktop/)) - для запуска через контейнеры
 
 ### Быстрый старт
 
@@ -102,6 +102,25 @@ npm run dev
 ```
 
 Frontend: http://localhost:3000
+
+### Альтернатива: Запуск через Docker
+
+Для тестирования или production деплоя используйте Docker контейнеры:
+
+```bash
+# Запуск всех сервисов
+docker-compose up -d
+
+# Инициализация БД
+./docker-init.sh
+```
+
+После запуска:
+
+- Backend: [http://localhost:8000](http://localhost:8000)
+- Frontend: [http://localhost:3000](http://localhost:3000)
+
+**Полная документация:** [DOCKER_SETUP.md](DOCKER_SETUP.md)
 
 ## Структура проекта
 
@@ -288,13 +307,3 @@ git push origin feature/description
 
 MIT License - см LICENSE
 
-## Авторы
-
-- Andrew Uglov - Lead Development
-- Claude Sonnet 4.5 - AI Pair Programming
-
----
-
-**Версия:** 1.0.0 (MVP)
-**Дата обновления:** Февраль 2026
-**Статус:** Production Ready
