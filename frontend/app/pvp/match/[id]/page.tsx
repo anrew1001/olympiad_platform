@@ -34,7 +34,7 @@ export default function PvPMatchPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // NEW: Timeout ref для автоочистки feedback иконки
+  // Timeout ref для автоочистки feedback иконки
   const feedbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // === Auth Check ===
@@ -96,21 +96,17 @@ export default function PvPMatchPage() {
     yourPlayerId: user?.id || 0,
     opponent: matchData?.player2 || null,
     initialTasks: matchData?.match_tasks || [],
-    isYouPlayer1, // NEW: передаём чтобы правильно определить rating_change
+    isYouPlayer1, // передаём чтобы правильно определить rating_change
     onMatchEnd: async (result) => {
-      console.log('[Match] Ended:', result);
       // Обновить рейтинг пользователя в navbar сразу после матча
       try {
         await refreshUser();
-        console.log('[Match] User rating refreshed');
       } catch (err) {
-        console.error('[Match] Failed to refresh user rating:', err);
+        // Failed to refresh user rating
       }
     },
     onAnswerResult: (taskId, isCorrect) => {
-      // NEW: Обработка feedback от сервера
-      console.log(`[Match] Answer result for task ${taskId}: ${isCorrect ? 'correct' : 'incorrect'}`);
-
+      // Обработка feedback от сервера
       // Установить статус correct/incorrect
       setSubmissionStatus(isCorrect ? 'correct' : 'incorrect');
 
@@ -161,7 +157,6 @@ export default function PvPMatchPage() {
         router.push('/pvp');
       }, 3000);
     } catch (err) {
-      console.error('Forfeit error:', err);
       alert(err instanceof Error ? err.message : 'Ошибка при сдаче');
     }
   };

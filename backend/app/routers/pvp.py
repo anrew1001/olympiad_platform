@@ -63,8 +63,6 @@ async def find_match(
         # HTTPException (409 conflict, etc) should propagate directly
         raise
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.exception(f"Error in find_or_create_match: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 

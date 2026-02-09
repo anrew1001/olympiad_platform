@@ -18,9 +18,9 @@ interface UseMatchWebSocketOptions {
   yourPlayerId: number;
   opponent: PlayerInfo | null;
   initialTasks: MatchTask[];
-  isYouPlayer1: boolean; // NEW: чтобы правильно определить rating_change
+  isYouPlayer1: boolean; // чтобы правильно определить rating_change
   onMatchEnd?: (result: MatchEndData) => void;
-  onAnswerResult?: (taskId: number, isCorrect: boolean) => void; // NEW: callback для UI feedback
+  onAnswerResult?: (taskId: number, isCorrect: boolean) => void; // callback для UI feedback
 }
 
 export interface MatchEndData {
@@ -63,7 +63,7 @@ export function useMatchWebSocket({
     isConnected: opponent ? true : false,
   });
 
-  // NEW: Отслеживать все отправленные ответы (не только правильные)
+  // Отслеживать все отправленные ответы (не только правильные)
   const [submittedTasks, setSubmittedTasks] = useState<Set<number>>(new Set());
 
   const rateLimiterRef = useRef(new RateLimitedQueue(1000)); // 1/sec
@@ -81,8 +81,6 @@ export function useMatchWebSocket({
   // === Server Event Handler ===
 
   function handleServerEvent(event: ServerEvent) {
-    console.log('[Match] Event:', event.type);
-
     switch (event.type) {
       case 'player_joined':
         setOpponentStatus({ isConnected: true });
@@ -106,7 +104,7 @@ export function useMatchWebSocket({
             : prev.yourSolvedTasks,
         }));
 
-        // NEW: Вызываем callback для UI feedback (correct/incorrect иконка)
+        // Вызываем callback для UI feedback (correct/incorrect иконка)
         onAnswerResult?.(event.task_id, event.is_correct);
         break;
 
@@ -159,10 +157,9 @@ export function useMatchWebSocket({
         break;
 
       case 'error':
-        console.error('[Match] Error:', event.message, event.code);
         // Handle specific error codes
         if (event.code === 'RATE_LIMITED') {
-          console.warn('Rate limited - please wait before submitting again');
+          // Rate limited
         }
         break;
 
@@ -255,18 +252,14 @@ export function useMatchWebSocket({
       // Блокировка только на backend для правильных ответов
 
       if (!rateLimiterRef.current.canSend()) {
-        const waitTime = rateLimiterRef.current.getWaitTime();
-        console.warn(`Rate limited. Wait ${waitTime}ms before next submission`);
         return false;
       }
 
       if (matchState.isFinished) {
-        console.warn('Match is finished');
         return false;
       }
 
       if (wsState.status !== 'connected') {
-        console.warn('WebSocket not connected');
         return false;
       }
 
@@ -300,6 +293,6 @@ export function useMatchWebSocket({
     canSubmit:
       wsState.status === 'connected' && rateLimiterRef.current.getWaitTime() <= 0 && !matchState.isFinished,
     isReady: wsState.status === 'connected',
-    submittedTasks, // NEW: Expose submitted tasks для UI
+    submittedTasks, // Expose submitted tasks для UI
   };
 }

@@ -168,16 +168,6 @@ def get_k_factor(rating: int, num_games: int | None = None) -> int:
     # Phase 1: Fixed K-factor for all players
     return K_FACTOR
 
-    # Phase 2: Adaptive K-factor (commented out for future implementation)
-    # if num_games is None or num_games < 30:
-    #     return 40  # Provisional players have higher volatility
-    # elif rating < 2000:
-    #     return 32  # Standard players
-    # elif rating < 2400:
-    #     return 24  # Expert players
-    # else:
-    #     return 16  # Elite players
-
 
 def apply_rating_bounds(rating: int) -> int:
     """
@@ -247,31 +237,3 @@ def simulate_match(rating_a: int, rating_b: int, winner: str = "a") -> dict:
             "actual_score": outcome_b,
         },
     }
-
-
-if __name__ == "__main__":
-    # Quick tests for manual verification
-    print("ELO System Test Cases:\n")
-
-    print("1. Equal Ratings (1000 vs 1000):")
-    result = simulate_match(1000, 1000, "a")
-    print(f"  Player A wins: {result['player_a']['change']:+d} points\n")
-
-    print("2. Strong Beats Weak (1200 vs 800):")
-    result = simulate_match(1200, 800, "a")
-    print(f"  Strong player gains: {result['player_a']['change']:+d} points")
-    print(f"  Weak player loses: {result['player_b']['change']:+d} points\n")
-
-    print("3. Upset Victory (800 beats 1200):")
-    result = simulate_match(1200, 800, "b")
-    print(f"  Weak player gains: {result['player_b']['change']:+d} points")
-    print(f"  Strong player loses: {result['player_a']['change']:+d} points\n")
-
-    print("4. Draw (1000 vs 1000):")
-    result = simulate_match(1000, 1000, "draw")
-    print(f"  Player A change: {result['player_a']['change']:+d} points\n")
-
-    print("5. Extreme Difference (100 vs 2800):")
-    result = simulate_match(100, 2800, "b")
-    print(f"  Weak player loses: {result['player_a']['change']:+d} points")
-    print(f"  Strong player gains: {result['player_b']['change']:+d} points")

@@ -7,7 +7,7 @@ import { getDifficultyColor, getDifficultyLabel } from '@/lib/constants/tasks';
 interface TaskListProps {
   tasks: MatchTask[];
   yourSolvedTasks: Set<number>;
-  opponentSolvedTasks: Set<number>; // NEW: Set задач противника вместо count
+  opponentSolvedTasks: Set<number>; // Set задач противника вместо count
   selectedTaskId: number | null;
   onSelectTask: (id: number) => void;
 }

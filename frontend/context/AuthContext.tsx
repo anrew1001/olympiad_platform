@@ -43,7 +43,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser(userData);
       } catch (error) {
         // Токен невалиден/истёк - getCurrentUser уже очистил localStorage
-        console.error('Auth init failed:', error);
         setUser(null);
       } finally {
         setIsLoading(false);

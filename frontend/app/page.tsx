@@ -20,7 +20,6 @@ export default function LandingPage() {
     getPublicStats()
       .then(setStats)
       .catch((err) => {
-        console.error('Failed to load stats:', err);
         // Fallback - показать placeholder
         setStats({
           total_tasks: 60,

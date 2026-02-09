@@ -69,12 +69,12 @@ export function useWebSocket(
           const data = JSON.parse(event.data) as ServerEvent;
           onMessageRef.current?.(data);
         } catch (error) {
-          console.error('Failed to parse WebSocket message:', error);
+          // Failed to parse WebSocket message
         }
       };
 
       ws.onerror = () => {
-        console.warn('WebSocket error occurred');
+        // WebSocket error occurred
       };
 
       ws.onclose = () => {
@@ -110,7 +110,6 @@ export function useWebSocket(
         }, backoffMs);
       };
     } catch (error) {
-      console.error('Failed to create WebSocket:', error);
       const s: ConnectionState = { status: 'disconnected', error: String(error) };
       setState(s);
       onStateChangeRef.current?.(s);
@@ -122,8 +121,6 @@ export function useWebSocket(
   const sendMessage = useCallback((message: ClientMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(message));
-    } else {
-      console.warn('WebSocket is not open, cannot send message');
     }
   }, []);
 
