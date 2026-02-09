@@ -1,0 +1,39 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Скопировать package files
+COPY frontend/package*.json ./
+
+# Установить зависимости
+RUN npm ci
+
+# Скопировать код
+COPY frontend/ .
+
+# Build Next.js приложение
+RUN npm run build
+
+# Production stage
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Установить только production зависимости
+COPY frontend/package*.json ./
+RUN npm ci --omit=dev
+
+# Скопировать built приложение из builder stage
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/package.json ./
+
+# Expose порт
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:3000 || exit 1
+
+# Команда запуска
+CMD ["npm", "start"]
