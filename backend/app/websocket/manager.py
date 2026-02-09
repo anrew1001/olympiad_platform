@@ -444,8 +444,6 @@ class ConnectionManager:
             - is_allowed: True если можно отправить ответ
             - seconds_until_allowed: Сколько секунд ждать если не разрешено (0.0 если разрешено)
         """
-        import time
-
         # Инициализировать rate limit dict если нет
         if match_id not in self._rate_limits:
             self._rate_limits[match_id] = {}

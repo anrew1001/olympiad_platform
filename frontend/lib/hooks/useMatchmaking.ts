@@ -34,11 +34,9 @@ export function useMatchmaking() {
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Find match error:', err, errorMessage);
 
       // Если конфликт (уже есть матч), пробуем отменить и повторить
       if (errorMessage.includes('CONFLICT') && !isRetry) {
-        console.log('Existing match found, canceling and retrying...');
         isRetryingRef.current = true;
         try {
           await cancelSearch();
@@ -47,7 +45,6 @@ export function useMatchmaking() {
           return;
         } catch (cancelErr) {
           const cancelMessage = cancelErr instanceof Error ? cancelErr.message : 'Unknown error';
-          console.error('Failed to cancel existing match:', cancelMessage);
           setError(`Не удалось отменить поиск: ${cancelMessage}`);
           setStatus('error');
           isRetryingRef.current = false;
@@ -94,18 +91,16 @@ export function useMatchmaking() {
     pollIntervalRef.current = setInterval(async () => {
       try {
         const response = await getMatch(id);
-        console.log(`[Polling] Match ${id} status: ${response.status}`);
 
         if (response.status === 'active') {
           // Соперник найден!
-          console.log(`[Polling] Match ${id} is active! Transitioning to found.`);
           setStatus('found');
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current);
           }
         }
       } catch (err) {
-        console.debug('Polling error:', err);
+        // Polling error
       }
     }, 2000);
   }, []);

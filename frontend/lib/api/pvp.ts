@@ -62,11 +62,6 @@ export async function findMatch(): Promise<FindMatchResponse> {
       errorMessage = errorText || `HTTP ${res.status} error`;
     }
 
-    console.error('Find match error response:', {
-      status: res.status,
-      message: errorMessage,
-    });
-
     if (res.status === 401) throw new Error('UNAUTHORIZED');
     if (res.status === 403) throw new Error('FORBIDDEN');
     if (res.status === 409) throw new Error(`CONFLICT: ${errorMessage}`);
