@@ -18,7 +18,9 @@ interface UseMatchWebSocketOptions {
   yourPlayerId: number;
   opponent: PlayerInfo | null;
   initialTasks: MatchTask[];
+  isYouPlayer1: boolean; // NEW: чтобы правильно определить rating_change
   onMatchEnd?: (result: MatchEndData) => void;
+  onAnswerResult?: (taskId: number, isCorrect: boolean) => void; // NEW: callback для UI feedback
 }
 
 export interface MatchEndData {
@@ -39,7 +41,9 @@ export function useMatchWebSocket({
   yourPlayerId,
   opponent,
   initialTasks,
+  isYouPlayer1,
   onMatchEnd,
+  onAnswerResult,
 }: UseMatchWebSocketOptions) {
   const [connectionState, setConnectionState] = useState<ConnectionState>({
     status: 'disconnected',
@@ -58,6 +62,9 @@ export function useMatchWebSocket({
   const [opponentStatus, setOpponentStatus] = useState<OpponentStatus>({
     isConnected: opponent ? true : false,
   });
+
+  // NEW: Отслеживать все отправленные ответы (не только правильные)
+  const [submittedTasks, setSubmittedTasks] = useState<Set<number>>(new Set());
 
   const rateLimiterRef = useRef(new RateLimitedQueue(1000)); // 1/sec
   const timeIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -87,6 +94,9 @@ export function useMatchWebSocket({
         break;
 
       case 'answer_result':
+        // Отметить задачу как отправленную (независимо от правильности)
+        setSubmittedTasks((prev) => new Set([...prev, event.task_id]));
+
         // Reconcile optimistic update with server response
         setMatchState((prev) => ({
           ...prev,
@@ -95,6 +105,9 @@ export function useMatchWebSocket({
             ? new Set([...prev.yourSolvedTasks, event.task_id])
             : prev.yourSolvedTasks,
         }));
+
+        // NEW: Вызываем callback для UI feedback (correct/incorrect иконка)
+        onAnswerResult?.(event.task_id, event.is_correct);
         break;
 
       case 'opponent_scored':
@@ -167,14 +180,14 @@ export function useMatchWebSocket({
   // === Match End Handler ===
 
   function handleMatchEnd(event: any) {
-    const yourRatingChange =
-      event.player1_rating_change !== undefined
-        ? event.player1_rating_change
-        : event.player2_rating_change;
-    const yourNewRating =
-      event.player1_new_rating !== undefined
-        ? event.player1_new_rating
-        : event.player2_new_rating;
+    // КРИТИЧНО: Используем isYouPlayer1 из props, а НЕ вычисляем через scores!
+    // Вычисление через scores было багом - могло давать неправильный результат
+    const yourRatingChange = isYouPlayer1
+      ? event.player1_rating_change
+      : event.player2_rating_change;
+    const yourNewRating = isYouPlayer1
+      ? event.player1_new_rating
+      : event.player2_new_rating;
 
     const result: MatchEndData = {
       outcome:
@@ -238,6 +251,9 @@ export function useMatchWebSocket({
 
   const submitAnswer = useCallback(
     (taskId: number, answer: string) => {
+      // Проверка submittedTasks убрана - разрешаем повторные попытки
+      // Блокировка только на backend для правильных ответов
+
       if (!rateLimiterRef.current.canSend()) {
         const waitTime = rateLimiterRef.current.getWaitTime();
         console.warn(`Rate limited. Wait ${waitTime}ms before next submission`);
@@ -263,7 +279,7 @@ export function useMatchWebSocket({
 
       return true;
     },
-    [matchState.isFinished, wsState.status, sendMessage]
+    [matchState.isFinished, wsState.status, sendMessage, submittedTasks]
   );
 
   // === Cleanup ===
@@ -282,7 +298,8 @@ export function useMatchWebSocket({
     opponentStatus,
     submitAnswer,
     canSubmit:
-      wsState.status === 'connected' && rateLimiterRef.current.canSend() && !matchState.isFinished,
+      wsState.status === 'connected' && rateLimiterRef.current.getWaitTime() <= 0 && !matchState.isFinished,
     isReady: wsState.status === 'connected',
+    submittedTasks, // NEW: Expose submitted tasks для UI
   };
 }

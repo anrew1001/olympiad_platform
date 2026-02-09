@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
-import { useAuth } from '@/lib/hooks/useAuth';
+import { useAuth } from '@/hooks/useAuth';
 import { useMatchWebSocket } from '@/lib/hooks/useMatchWebSocket';
-import { getMatch, type MatchDetailResponse } from '@/lib/api/pvp';
+import { getMatch, forfeitMatch, type MatchDetailResponse } from '@/lib/api/pvp';
 import type { MatchTask, PlayerInfo } from '@/lib/types/websocket';
 import { MatchHeader } from '@/components/pvp/MatchHeader';
 import { TaskList } from '@/components/pvp/TaskList';
@@ -23,7 +23,7 @@ import { LoadingScreen } from '@/components/ui/LoadingScreen';
 export default function PvPMatchPage() {
   const params = useParams();
   const router = useRouter();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, refreshUser } = useAuth();
   const matchId = parseInt(params.id as string);
 
   // === Local State ===
@@ -33,6 +33,9 @@ export default function PvPMatchPage() {
   const [submissionStatus, setSubmissionStatus] = useState<'submitting' | 'correct' | 'incorrect'>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // NEW: Timeout ref для автоочистки feedback иконки
+  const feedbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // === Auth Check ===
 
@@ -75,6 +78,9 @@ export default function PvPMatchPage() {
 
   // === WebSocket Setup ===
 
+  // Определить кто вы - player1 или player2
+  const isYouPlayer1 = matchData ? matchData.player1.id === user?.id : false;
+
   const {
     connectionState,
     matchState,
@@ -82,6 +88,7 @@ export default function PvPMatchPage() {
     submitAnswer,
     canSubmit,
     isReady,
+    submittedTasks,
   } = useMatchWebSocket({
     matchId,
     // Передаём пустую строку пока matchData не загружен → WebSocket не подключается
@@ -89,9 +96,33 @@ export default function PvPMatchPage() {
     yourPlayerId: user?.id || 0,
     opponent: matchData?.player2 || null,
     initialTasks: matchData?.match_tasks || [],
-    onMatchEnd: (result) => {
+    isYouPlayer1, // NEW: передаём чтобы правильно определить rating_change
+    onMatchEnd: async (result) => {
       console.log('[Match] Ended:', result);
-      // Results overlay will show automatically via matchState.isFinished
+      // Обновить рейтинг пользователя в navbar сразу после матча
+      try {
+        await refreshUser();
+        console.log('[Match] User rating refreshed');
+      } catch (err) {
+        console.error('[Match] Failed to refresh user rating:', err);
+      }
+    },
+    onAnswerResult: (taskId, isCorrect) => {
+      // NEW: Обработка feedback от сервера
+      console.log(`[Match] Answer result for task ${taskId}: ${isCorrect ? 'correct' : 'incorrect'}`);
+
+      // Установить статус correct/incorrect
+      setSubmissionStatus(isCorrect ? 'correct' : 'incorrect');
+
+      // Очистить предыдущий таймаут если был
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current);
+      }
+
+      // Автоочистка feedback через 2.5 секунды
+      feedbackTimeoutRef.current = setTimeout(() => {
+        setSubmissionStatus(undefined);
+      }, 2500);
     },
   });
 
@@ -99,6 +130,13 @@ export default function PvPMatchPage() {
 
   const handleSubmitAnswer = (answer: string) => {
     if (!selectedTaskId || !canSubmit) return;
+
+    // Разрешаем повторные попытки - backend блокирует только правильные ответы
+
+    // Очистить предыдущий feedback если был
+    if (feedbackTimeoutRef.current) {
+      clearTimeout(feedbackTimeoutRef.current);
+    }
 
     setSubmissionStatus('submitting');
 
@@ -108,19 +146,36 @@ export default function PvPMatchPage() {
       return;
     }
 
-    // Simulate submission (real response comes via WebSocket)
-    setTimeout(() => {
-      // Will be updated by WebSocket answer_result event
-      setSubmissionStatus(undefined);
-      // Auto-select next unsolved task (optional)
-      const nextUnsolved = matchData?.match_tasks.find(
-        (t) => !matchState.yourSolvedTasks.has(t.task_id)
-      );
-      if (nextUnsolved) {
-        setSelectedTaskId(nextUnsolved.task_id);
-      }
-    }, 500);
+    // Теперь НЕ очищаем submissionStatus здесь!
+    // Он будет обновлён через onAnswerResult callback когда сервер ответит
   };
+
+  // === Handle Forfeit ===
+
+  const handleForfeit = async () => {
+    try {
+      await forfeitMatch(matchId);
+      // WebSocket отправит match_end event автоматически
+      // или можно перезагрузить страницу
+      setTimeout(() => {
+        router.push('/pvp');
+      }, 3000);
+    } catch (err) {
+      console.error('Forfeit error:', err);
+      alert(err instanceof Error ? err.message : 'Ошибка при сдаче');
+    }
+  };
+
+  // === Cleanup ===
+
+  useEffect(() => {
+    return () => {
+      // Очистить таймаут feedback при размонтировании
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // === Render Loading ===
 
@@ -154,7 +209,7 @@ export default function PvPMatchPage() {
 
   // === Determine Player Order ===
 
-  const isYouPlayer1 = matchData.player1.id === user?.id;
+  // isYouPlayer1 уже определён выше для WebSocket hook
   const player1 = { ...matchData.player1, isYou: isYouPlayer1 };
   const player2 = matchData.player2 ? { ...matchData.player2, isYou: !isYouPlayer1 } : null;
 
@@ -166,18 +221,49 @@ export default function PvPMatchPage() {
   // === Render ===
 
   return (
-    <div className="min-h-screen bg-[#121212] relative">
-      {/* Статичный grid background (без анимации для читабельности) */}
-      <div
-        className="fixed inset-0 opacity-[0.02] z-0 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(90deg, #0066FF 1px, transparent 1px),
-            linear-gradient(0deg, #0066FF 1px, transparent 1px)
-          `,
-          backgroundSize: '40px 40px',
-        }}
-      />
+    <div className="min-h-screen bg-[#121212] relative overflow-hidden">
+      {/* Electrical field background */}
+      <div className="fixed inset-0 pointer-events-none -z-10">
+        {/* Subtle glow animation */}
+        {[0, 1, 2].map((i) => (
+          <motion.div
+            key={i}
+            animate={{
+              opacity: [0, 0.015, 0],
+              scale: [1, 1.1, 1],
+            }}
+            transition={{
+              duration: 6 + i * 1.5,
+              repeat: Infinity,
+              delay: i * 2,
+              ease: 'easeInOut',
+            }}
+            className="absolute"
+            style={{
+              width: '250px',
+              height: '250px',
+              left: `${15 + i * 35}%`,
+              top: `${5 + i * 25}%`,
+              background: `radial-gradient(circle, rgba(0, 150, 199, 0.15) 0%, transparent 70%)`,
+              filter: 'blur(50px)',
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Grid background */}
+      <div className="fixed inset-0 opacity-[0.01] pointer-events-none -z-10">
+        <div
+          className="h-full w-full"
+          style={{
+            backgroundImage: `
+              linear-gradient(90deg, #00d4ff 1px, transparent 1px),
+              linear-gradient(0deg, #00d4ff 1px, transparent 1px)
+            `,
+            backgroundSize: '60px 60px',
+          }}
+        />
+      </div>
 
       {/* Connection status */}
       <ConnectionStatus state={connectionState} />
@@ -192,6 +278,8 @@ export default function PvPMatchPage() {
           score2={isYouPlayer1 ? matchState.opponentScore : matchState.yourScore}
           timeElapsed={matchState.timeElapsed}
           opponentDisconnected={opponentStatus.disconnectWarning}
+          onForfeit={handleForfeit}
+          matchFinished={matchState.isFinished}
         />
 
         {/* Disconnect Warning */}
@@ -220,7 +308,7 @@ export default function PvPMatchPage() {
             <TaskList
               tasks={matchData.match_tasks}
               yourSolvedTasks={matchState.yourSolvedTasks}
-              opponentSolvedCount={matchState.opponentSolvedTasks.size}
+              opponentSolvedTasks={matchState.opponentSolvedTasks}
               selectedTaskId={selectedTaskId}
               onSelectTask={setSelectedTaskId}
             />

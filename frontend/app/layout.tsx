@@ -17,7 +17,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Olympeit - Олимпиадная Платформа",
+  title: "Olympiet - Олимпиадная Платформа",
   description: "PvP олимпиады по программированию",
 };
 

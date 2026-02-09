@@ -9,7 +9,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "@/lib/hooks/useAuth";
+import { useAuth } from "@/hooks/useAuth";
 import { getAdminStats, type AdminStats } from "@/lib/api/admin";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 

@@ -25,12 +25,6 @@ export function MatchResults({
   const isVictory = outcome === 'victory';
   const isDraw = outcome === 'draw';
 
-  const getOutcomeEmoji = () => {
-    if (isVictory) return '🏆';
-    if (isDraw) return '⚔️';
-    return '💔';
-  };
-
   const getOutcomeText = () => {
     if (isVictory) return 'ПОБЕДА!';
     if (isDraw) return 'НИЧЬЯ!';
@@ -123,15 +117,8 @@ export function MatchResults({
           animate="visible"
           className="space-y-8"
         >
-          {/* Outcome emoji + text */}
+          {/* Outcome text */}
           <motion.div variants={itemVariants} className="space-y-3">
-            <motion.div
-              className="text-6xl"
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ duration: 0.8 }}
-            >
-              {getOutcomeEmoji()}
-            </motion.div>
             <h1
               className="text-5xl md:text-6xl font-mono uppercase font-bold tracking-wider"
               style={{
@@ -172,7 +159,7 @@ export function MatchResults({
           {/* Rating change - DRAMATIC */}
           <motion.div variants={itemVariants} className="space-y-4 py-6 px-6 rounded border border-[#0066FF]/30 bg-[#0066FF]/5">
             <p className="text-sm font-mono text-[#0066FF] uppercase tracking-widest text-center">
-              📊 ИЗМЕНЕНИЕ РЕЙТИНГА
+              ИЗМЕНЕНИЕ РЕЙТИНГА
             </p>
 
             <div className="flex justify-center items-center gap-6">
@@ -183,7 +170,7 @@ export function MatchResults({
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.6, duration: 0.5 }}
               >
-                <span className="text-4xl font-mono font-bold text-[#888] block">1200</span>
+                <span className="text-4xl font-mono font-bold text-[#888] block">{newRating - ratingChange}</span>
                 <span className="text-xs font-mono text-[#555] mt-2">ДО</span>
               </motion.div>
 
@@ -250,8 +237,8 @@ export function MatchResults({
           {/* Reason (if forfeit or error) */}
           {(reason === 'forfeit' || reason === 'technical_error') && (
             <motion.p variants={itemVariants} className="text-xs font-mono text-[#888]">
-              {reason === 'forfeit' && '⚠ Соперник отключился'}
-              {reason === 'technical_error' && '⚠ Техническая ошибка (рейтинг не изменился)'}
+              {reason === 'forfeit' && 'Соперник отключился'}
+              {reason === 'technical_error' && 'Техническая ошибка (рейтинг не изменился)'}
             </motion.p>
           )}
 

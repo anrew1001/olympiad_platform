@@ -33,7 +33,8 @@ export function TaskViewer({
   const handleSubmit = () => {
     if (answer.trim() && !disabled) {
       onSubmit(answer.trim());
-      setAnswer('');
+      // Не очищаем поле - разрешаем повторные попытки
+      // Поле очистится автоматически при переключении задачи (useEffect выше)
     }
   };
 
@@ -106,45 +107,47 @@ export function TaskViewer({
         <div className="pt-3 border-t border-[#1a1a1a]" />
       </motion.div>
 
-      {/* Task text */}
+      {/* Task text with fancy background */}
       <motion.div
-        className="space-y-4"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.15 }}
+        className="space-y-4 p-6"
+        style={{
+          border: '2px solid #0096c7',
+          background: 'linear-gradient(135deg, #121212 0%, rgba(0, 150, 199, 0.02) 50%, rgba(100, 50, 150, 0.01) 100%)',
+          clipPath:
+            'polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px))',
+          boxShadow: '0 0 20px rgba(0, 150, 199, 0.15), inset 0 0 20px rgba(0, 150, 199, 0.03)',
+          maxHeight: '400px',
+          overflowY: 'auto',
+        }}
       >
+        {/* Task description */}
         <div
-          className="text-base leading-loose text-[#e5e5e5] font-sora whitespace-pre-wrap break-words px-2"
-          style={{ maxHeight: '400px', overflowY: 'auto', lineHeight: '1.8' }}
+          className="text-base leading-loose text-[#e5e5e5] font-sora whitespace-pre-wrap break-words"
+          style={{ lineHeight: '1.8' }}
         >
           {task.text}
         </div>
 
         {/* Hints */}
         {task.hints && task.hints.length > 0 && (
-          <motion.div
-            className="mt-6 pt-6 border-t border-[#1a1a1a]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-          >
-            <p className="text-xs font-mono text-[#0066FF] uppercase tracking-wider mb-3">
+          <div className="mt-6 pt-6 border-t border-[#0096c7]/30">
+            <p className="text-xs font-mono text-[#0096c7] uppercase tracking-wider mb-3">
               ▸ ПОДСКАЗКИ
             </p>
             <ul className="space-y-2">
               {task.hints.map((hint, idx) => (
-                <motion.li
+                <li
                   key={idx}
-                  className="text-xs text-[#888] font-sora pl-3 border-l-2 border-[#0066FF]/40"
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.2 + idx * 0.05 }}
+                  className="text-xs text-[#888] font-sora pl-3 border-l-2 border-[#0096c7]/40"
                 >
                   {hint}
-                </motion.li>
+                </li>
               ))}
             </ul>
-          </motion.div>
+          </div>
         )}
       </motion.div>
 

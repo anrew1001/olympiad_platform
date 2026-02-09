@@ -133,3 +133,21 @@ export async function getMatch(matchId: number): Promise<MatchDetailResponse> {
 
   return res.json();
 }
+
+/**
+ * POST /api/pvp/match/{matchId}/forfeit
+ * Сдаться в матче
+ */
+export async function forfeitMatch(matchId: number): Promise<{ ok: boolean; message: string; rating_change: number }> {
+  const res = await fetch(`${API_URL}/api/pvp/match/${matchId}/forfeit`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Ошибка при сдаче' }));
+    throw new Error(error.detail);
+  }
+
+  return res.json();
+}

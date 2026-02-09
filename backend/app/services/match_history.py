@@ -12,7 +12,7 @@ from typing import Optional
 from sqlalchemy import select, func, or_, and_, case, cast, literal
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
-from sqlalchemy.types import Float
+from sqlalchemy.types import Float, Numeric
 
 from app.models import Match, User, MatchTask, MatchAnswer, Task
 from app.schemas.match_history import (
@@ -681,7 +681,7 @@ async def get_detailed_match_stats(
             func.round(
                 cast(
                     func.sum(case((MatchAnswer.is_correct, 1), else_=0)),
-                    Float
+                    Numeric
                 ) / func.nullif(func.count(), 0) * 100,
                 2
             ).label("success_rate")

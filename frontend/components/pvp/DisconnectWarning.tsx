@@ -54,7 +54,7 @@ export function DisconnectWarning({ secondsRemaining, opponentName }: Disconnect
 
         <div className="relative z-10 flex items-center justify-between gap-4">
           <span>
-            ⚠ {opponentName} отключился · FORFEIT через{' '}
+            {opponentName} отключился · FORFEIT через{' '}
             <motion.span
               className="font-bold"
               animate={{ scale: [1, 1.1, 1] }}

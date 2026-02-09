@@ -36,18 +36,22 @@ export default function LeaderboardPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-6">Таблица лидеров</h1>
-        <LoadingSkeleton />
+      <div className="min-h-screen bg-[#121212]">
+        <div className="container mx-auto px-4 py-8">
+          <h1 className="text-3xl font-bold mb-6 text-white">Таблица лидеров</h1>
+          <LoadingSkeleton />
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-6">Таблица лидеров</h1>
-        <ErrorMessage message={error} />
+      <div className="min-h-screen bg-[#121212]">
+        <div className="container mx-auto px-4 py-8">
+          <h1 className="text-3xl font-bold mb-6 text-white">Таблица лидеров</h1>
+          <ErrorMessage message={error} />
+        </div>
       </div>
     );
   }
@@ -57,39 +61,41 @@ export default function LeaderboardPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 min-h-screen">
-      <h1 className="text-3xl font-bold mb-2">Таблица лидеров</h1>
-      <p className="text-gray-400 mb-6">
-        Всего в рейтинге: <span className="font-semibold">{data.total_users}</span> игроков
-      </p>
+    <div className="min-h-screen bg-[#121212]">
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold mb-2 text-white">Таблица лидеров</h1>
+        <p className="text-gray-400 mb-6">
+          Всего в рейтинге: <span className="font-semibold">{data.total_users}</span> игроков
+        </p>
 
-      <LeaderboardTable
-        entries={data.entries}
-        currentUserEntry={data.current_user_entry}
-      />
+        <LeaderboardTable
+          entries={data.entries}
+          currentUserEntry={data.current_user_entry}
+        />
 
-      {/* "Показать ещё" кнопка */}
-      {data.entries.length < data.total_users && (
-        <div className="mt-6 text-center">
-          <button
-            onClick={handleShowMore}
-            className={`
-              px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold
-              rounded-lg transition-colors duration-200
-              focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-black
-            `}
-          >
-            Показать ещё +50
-          </button>
-        </div>
-      )}
+        {/* "Показать ещё" кнопка */}
+        {data.entries.length < data.total_users && (
+          <div className="mt-6 text-center">
+            <button
+              onClick={handleShowMore}
+              className={`
+                px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold
+                rounded-lg transition-colors duration-200
+                focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-black
+              `}
+            >
+              Показать ещё +50
+            </button>
+          </div>
+        )}
 
-      {/* Информационное сообщение если всё загружено */}
-      {data.entries.length >= data.total_users && data.total_users > 0 && (
-        <div className="mt-6 text-center">
-          <p className="text-gray-500 text-sm">Вы просмотрели всех игроков рейтинга</p>
-        </div>
-      )}
+        {/* Информационное сообщение если всё загружено */}
+        {data.entries.length >= data.total_users && data.total_users > 0 && (
+          <div className="mt-6 text-center">
+            <p className="text-gray-500 text-sm">Вы просмотрели всех игроков рейтинга</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

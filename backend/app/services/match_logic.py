@@ -70,6 +70,10 @@ async def process_answer(
     normalized_correct = task.answer.strip().lower()
     is_correct = normalized_answer == normalized_correct
 
+    logger.info(
+        f"[ANSWER CHECK] Task {task_id}: user='{normalized_answer}' vs correct='{normalized_correct}' -> {is_correct}"
+    )
+
     # 4. UPSERT MatchAnswer
     # Сначала проверяем существующий ответ
     result = await session.execute(
@@ -82,13 +86,18 @@ async def process_answer(
     existing_answer = result.scalar_one_or_none()
 
     if existing_answer:
-        # UPDATE существующего ответа
+        # Проверить что предыдущий ответ не был правильным
+        # Разрешаем повторные попытки только если предыдущий ответ был неправильным
+        if existing_answer.is_correct:
+            raise ValueError(
+                f"Вы уже правильно ответили на эту задачу!"
+            )
+        # Обновляем неправильный ответ новой попыткой
         existing_answer.answer = answer
         existing_answer.is_correct = is_correct
-        # submitted_at хранится как TIMESTAMP WITHOUT TIME ZONE в БД
         existing_answer.submitted_at = datetime.utcnow()
         logger.debug(
-            f"Updated answer for user {user_id} on task {task_id}: {is_correct}"
+            f"Updated incorrect answer for user {user_id} on task {task_id}: new={is_correct}"
         )
     else:
         # INSERT нового ответа
@@ -136,8 +145,10 @@ async def check_match_completion(
     """
     Проверяет завершился ли матч.
 
-    Условие завершения (выбрано пользователем):
-    - Оба игрока отправили ответы на все задачи матча
+    Условия завершения:
+    1. Оба игрока отправили ответы на все задачи матча
+    2. ДОСРОЧНАЯ ПОБЕДА: один игрок набрал больше половины задач, и второй уже не может догнать
+       Пример для 5 задач: если P1=3, P2=0, то максимум P2 может набрать 2 → P1 выигрывает
 
     Args:
         match_id: ID матча
@@ -176,22 +187,6 @@ async def check_match_completion(
 
     # Получить количество ответов от player2
     result = await session.execute(
-        select(MatchAnswer.id)
-        .where(
-            (MatchAnswer.match_id == match_id)
-            & (MatchAnswer.user_id == match.player2_id)
-        )
-        .distinct()
-    )
-    player2_answered = len((await session.execute(
-        select(func.count(MatchAnswer.id)).where(
-            (MatchAnswer.match_id == match_id)
-            & (MatchAnswer.user_id == match.player2_id)
-        )
-    )).all())
-
-    # Использовать более простой способ
-    result = await session.execute(
         select(func.count(MatchAnswer.id)).where(
             (MatchAnswer.match_id == match_id)
             & (MatchAnswer.user_id == match.player2_id)
@@ -199,12 +194,29 @@ async def check_match_completion(
     )
     player2_answered = result.scalar() or 0
 
-    is_complete = player1_answered >= total_tasks and player2_answered >= total_tasks
+    # Условие 1: Оба ответили на все задачи
+    both_answered_all = player1_answered >= total_tasks and player2_answered >= total_tasks
+
+    # Условие 2: Досрочная победа
+    # Текущие счета из match.player1_score / match.player2_score
+    p1_score = match.player1_score
+    p2_score = match.player2_score
+
+    # Максимально возможные счета (если ответят правильно на все оставшиеся)
+    p1_max_possible = p1_score + (total_tasks - player1_answered)
+    p2_max_possible = p2_score + (total_tasks - player2_answered)
+
+    # Досрочная победа: один игрок не может ОПЕРЕДИТЬ другого (даже если догонит)
+    # Для победы нужно иметь БОЛЬШЕ баллов, равенство = ничья
+    early_win = p1_score > p2_max_possible or p2_score > p1_max_possible
+
+    is_complete = both_answered_all or early_win
 
     logger.debug(
         f"Match {match_id} completion check: "
-        f"P1={player1_answered}/{total_tasks}, P2={player2_answered}/{total_tasks}, "
-        f"complete={is_complete}"
+        f"P1_answered={player1_answered}/{total_tasks} (score={p1_score}, max={p1_max_possible}), "
+        f"P2_answered={player2_answered}/{total_tasks} (score={p2_score}, max={p2_max_possible}), "
+        f"both_answered_all={both_answered_all}, early_win={early_win}, complete={is_complete}"
     )
 
     return is_complete
@@ -282,7 +294,9 @@ async def finalize_match(
         logger.info(f"Match {match_id} already ERROR, cannot finalize")
         raise ValueError(f"Match {match_id} is in ERROR state, cannot finalize")
 
-    if match.status != MatchStatus.ACTIVE:
+    # Allow both WAITING and ACTIVE status for finalization
+    # WAITING is valid if match hasn't transitioned to ACTIVE yet but players answered
+    if match.status not in (MatchStatus.WAITING, MatchStatus.ACTIVE):
         raise ValueError(f"Match {match_id} is in {match.status} state, cannot finalize")
 
     # 2. Определить победителя в зависимости от reason
@@ -613,8 +627,13 @@ async def activate_match(
         match_id: ID матча
         session: Асинхронная сессия БД
     """
+    # ВАЖНО: с noload() исключаем relationships чтобы избежать LEFT OUTER JOIN
+    # PostgreSQL не позволяет FOR UPDATE с nullable side LEFT JOIN
     result = await session.execute(
-        select(Match).where(Match.id == match_id).with_for_update()
+        select(Match)
+        .where(Match.id == match_id)
+        .options(noload(Match.player1), noload(Match.player2), noload(Match.winner))
+        .with_for_update()
     )
     match = result.scalar_one_or_none()
 

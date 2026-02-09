@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { useMatchmaking } from '@/lib/hooks/useMatchmaking';
-import { useAuth } from '@/lib/hooks/useAuth';
+import { useAuth } from '@/hooks/useAuth';
 import { QueueAnimation } from '@/components/pvp/QueueAnimation';
 import { QueueStatus } from '@/components/pvp/QueueStatus';
 import { LoadingScreen } from '@/components/ui/LoadingScreen';
@@ -110,7 +110,7 @@ export default function PvPQueuePage() {
               textShadow: '0 0 30px rgba(0, 102, 255, 0.5)',
             }}
           >
-            ⚔️ АРЕНА ПОИСКА
+            АРЕНА ПОИСКА
           </h1>
           <p className="text-sm font-mono text-[#0066FF] tracking-widest">НАЙДИ СОПЕРНИКА И ПОМЕРЬСЯ СИЛАМИ</p>
         </motion.div>
