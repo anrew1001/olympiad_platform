@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { motion } from 'motion/react';
 import { Logo } from '@/components/ui/Logo';
 import { getPublicStats, type PublicStats } from '@/lib/api/stats';
-import { useAuth } from '@/lib/hooks/useAuth';
+import { useAuth } from '@/hooks/useAuth';
 
 /**
  * Landing Page - Главная страница платформы
@@ -239,7 +239,7 @@ export default function LandingPage() {
       <footer className="relative z-10 py-12 px-6 border-t border-[#0066FF]/10">
         <div className="max-w-7xl mx-auto text-center">
           <p className="text-xs font-mono text-[#666]">
-            © 2026 OLYMPIAD PLATFORM
+            © 2026 OLYMPIET
           </p>
         </div>
       </footer>

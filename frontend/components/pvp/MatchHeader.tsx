@@ -10,6 +10,8 @@ interface MatchHeaderProps {
   score2: number;
   timeElapsed: number;
   opponentDisconnected?: { secondsRemaining: number };
+  onForfeit?: () => void;
+  matchFinished?: boolean;
 }
 
 /**
@@ -23,6 +25,8 @@ export function MatchHeader({
   score2,
   timeElapsed,
   opponentDisconnected,
+  onForfeit,
+  matchFinished = false,
 }: MatchHeaderProps) {
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -154,6 +158,23 @@ export function MatchHeader({
               >
                 ⚠ FORFEIT через {opponentDisconnected.secondsRemaining}s
               </motion.div>
+            )}
+
+            {/* Forfeit Button */}
+            {!matchFinished && onForfeit && (
+              <button
+                onClick={() => {
+                  if (confirm('Вы уверены что хотите сдаться?')) {
+                    onForfeit();
+                  }
+                }}
+                className="px-4 py-2 text-xs font-mono bg-[#1a0a0a] border border-[#ff3b30]/40 text-[#ff3b30] hover:border-[#ff3b30] hover:bg-[#ff3b30]/10 transition-all"
+                style={{
+                  clipPath: 'polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px))',
+                }}
+              >
+                СДАТЬСЯ
+              </button>
             )}
           </div>
 

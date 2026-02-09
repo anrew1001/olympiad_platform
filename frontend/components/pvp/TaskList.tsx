@@ -7,7 +7,7 @@ import { getDifficultyColor, getDifficultyLabel } from '@/lib/constants/tasks';
 interface TaskListProps {
   tasks: MatchTask[];
   yourSolvedTasks: Set<number>;
-  opponentSolvedCount: number; // Just count, не IDs
+  opponentSolvedTasks: Set<number>; // NEW: Set задач противника вместо count
   selectedTaskId: number | null;
   onSelectTask: (id: number) => void;
 }
@@ -19,7 +19,7 @@ interface TaskListProps {
 export function TaskList({
   tasks,
   yourSolvedTasks,
-  opponentSolvedCount,
+  opponentSolvedTasks,
   selectedTaskId,
   onSelectTask,
 }: TaskListProps) {
@@ -57,6 +57,7 @@ export function TaskList({
       <AnimatePresence mode="popLayout">
         {tasks.map((task, idx) => {
           const isSolved = yourSolvedTasks.has(task.task_id);
+          const isOpponentSolved = opponentSolvedTasks.has(task.task_id);
           const isSelected = selectedTaskId === task.task_id;
           const diffColor = getDifficultyColor(task.difficulty);
           const diffLabel = getDifficultyLabel(task.difficulty);
@@ -130,7 +131,7 @@ export function TaskList({
                 </span>
 
                 {/* Opponent solved indicator */}
-                {opponentSolvedCount > 0 && !isSolved && (
+                {isOpponentSolved && (
                   <motion.span
                     className="text-xs font-mono text-[#06b6d4] font-bold"
                     animate={{ opacity: [0.4, 1, 0.4], scale: [0.9, 1.1, 0.9] }}
@@ -159,7 +160,7 @@ export function TaskList({
           </p>
           <p>
             ⊙ Соперник:{' '}
-            <span className="text-[#06b6d4]">{opponentSolvedCount}</span>/{tasks.length}
+            <span className="text-[#06b6d4]">{opponentSolvedTasks.size}</span>/{tasks.length}
           </p>
         </div>
 

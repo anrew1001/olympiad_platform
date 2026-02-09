@@ -7,6 +7,8 @@
 session.begin() вызывать НЕЛЬЗЯ.
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
@@ -18,7 +20,12 @@ from app.models.match import Match
 from app.models.user import User
 from app.models.enums import MatchStatus
 from app.services.matching import find_or_create_match, cancel_waiting_match
+from app.services.match_logic import finalize_match_forfeit
 from app.schemas.match import MatchResponse, MatchDetailResponse, CancelResponse, OpponentInfo
+from app.schemas.websocket import MatchEndEvent
+from app.websocket.manager import manager
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api/pvp", tags=["pvp"])
@@ -156,3 +163,100 @@ async def get_match_detail(
         )
 
     return MatchDetailResponse.from_match(match)
+
+@router.post(
+    "/match/{match_id}/forfeit",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    summary="Сдаться в матче",
+    description="Игрок сдаётся, соперник побеждает автоматически. Применяются изменения рейтинга через ELO систему.",
+)
+async def forfeit_match(
+    match_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    POST /api/pvp/match/{match_id}/forfeit
+
+    Игрок сдаётся в активном матче:
+    - Соперник получает победу
+    - Рейтинги обновляются через ELO систему
+    - Матч переводится в статус FINISHED
+    - match_end событие отправляется обоим игрокам через WebSocket
+    """
+    # Получить матч
+    result = await db.execute(
+        select(Match).where(Match.id == match_id)
+    )
+    match = result.scalar_one_or_none()
+
+    if not match:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Матч не найден"
+        )
+
+    # Проверить что пользователь - участник
+    if current_user.id not in (match.player1_id, match.player2_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Вы не участник этого матча"
+        )
+
+    # Проверить что матч активен
+    if match.status not in (MatchStatus.WAITING, MatchStatus.ACTIVE):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Матч уже завершён или отменён"
+        )
+
+    # Использовать finalize_match_forfeit для корректного ELO расчёта
+    try:
+        result_data = await finalize_match_forfeit(match_id, current_user.id, db)
+        await db.commit()
+
+        logger.info(
+            f"Match {match_id}: User {current_user.id} forfeited via REST API, "
+            f"winner={result_data['winner_id']}"
+        )
+
+        # Отправить match_end событие через WebSocket обоим игрокам
+        match_end_event = MatchEndEvent(
+            reason="forfeit",
+            winner_id=result_data["winner_id"],
+            player1_rating_change=result_data["player1_rating_change"],
+            player1_new_rating=result_data["player1_new_rating"],
+            player2_rating_change=result_data["player2_rating_change"],
+            player2_new_rating=result_data["player2_new_rating"],
+            final_scores={
+                "player1_score": result_data["final_scores"]["player1_score"],
+                "player2_score": result_data["final_scores"]["player2_score"],
+            },
+        )
+
+        # Broadcast to both players (if connected)
+        await manager.broadcast(match_id, match_end_event.model_dump())
+
+        logger.info(f"Match {match_id}: match_end event broadcasted via WebSocket")
+
+        # Определить изменение рейтинга для текущего пользователя (проигравший)
+        is_player1 = current_user.id == match.player1_id
+        your_rating_change = (
+            result_data["player1_rating_change"] if is_player1
+            else result_data["player2_rating_change"]
+        )
+
+        return {
+            "ok": True,
+            "message": "Вы сдались",
+            "winner_id": result_data["winner_id"],
+            "rating_change": your_rating_change,
+        }
+
+    except ValueError as e:
+        logger.error(f"Forfeit error for match {match_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )

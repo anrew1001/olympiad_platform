@@ -40,12 +40,12 @@ export function Navbar() {
             <Logo size={80} className="text-[#0066FF] group-hover:text-[#0080FF] transition-colors" />
           </motion.div>
           <span className="font-mono text-3xl font-bold text-white tracking-wider">
-            OLYMPIAD
+            OLYMPIET
           </span>
         </Link>
 
         {/* Center: Navigation */}
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-8">
           {navLinks.map((link) => (
             <Link
               key={link.href}
@@ -54,7 +54,7 @@ export function Navbar() {
             >
               <span
                 className={`
-                  text-xs font-mono tracking-wider transition-colors
+                  text-sm font-mono font-semibold tracking-wider transition-colors
                   ${isActive(link.href) ? 'text-[#0066FF]' : 'text-[#999] hover:text-white'}
                 `}
               >
@@ -77,15 +77,15 @@ export function Navbar() {
         </div>
 
         {/* Right: Auth */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-5">
           {isAuthenticated && user ? (
             <>
               {/* User badge (не кликабельный - профиль в навигации) */}
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded border border-[#0066FF]/30">
-                <span className="text-xs font-mono text-white">
+              <div className="flex items-center gap-3 px-4 py-2 rounded border border-[#0066FF]/30">
+                <span className="text-sm font-mono text-white font-semibold">
                   {user.username}
                 </span>
-                <span className="text-xs font-mono text-[#0066FF] font-bold">
+                <span className="text-sm font-mono text-[#0066FF] font-bold">
                   ★ {user.rating}
                 </span>
               </div>
@@ -93,7 +93,7 @@ export function Navbar() {
               {/* Logout */}
               <button
                 onClick={logout}
-                className="text-xs font-mono text-[#999] hover:text-[#ff3b30] transition-colors"
+                className="text-sm font-mono font-semibold text-[#999] hover:text-[#ff3b30] transition-colors"
               >
                 ВЫХОД
               </button>
@@ -101,7 +101,7 @@ export function Navbar() {
           ) : (
             <Link
               href="/login"
-              className="px-4 py-2 text-xs font-mono font-bold text-white border border-[#0066FF] hover:bg-[#0066FF]/10 transition-all"
+              className="px-6 py-3 text-sm font-mono font-bold text-white border border-[#0066FF] hover:bg-[#0066FF]/10 transition-all"
               style={{
                 clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
               }}

@@ -208,6 +208,8 @@ async def handle_message(
         task_id = message.get("task_id")
         answer = message.get("answer")
 
+        logger.info(f"[ANSWER] User {user_id} submitted answer for task {task_id}: '{answer}' (type={type(answer).__name__}, len={len(str(answer)) if answer is not None else 0})")
+
         if not task_id or answer is None:
             await manager.send_personal(
                 match_id,
@@ -276,10 +278,35 @@ async def handle_message(
                     )
                     return
 
+                # Проверить что task_id принадлежит этому матчу
+                result_task = await session.execute(
+                    select(MatchTask).where(
+                        (MatchTask.match_id == match_id) &
+                        (MatchTask.task_id == task_id)
+                    )
+                )
+                match_task = result_task.scalar_one_or_none()
+
+                if not match_task:
+                    await manager.send_personal(
+                        match_id,
+                        user_id,
+                        ErrorEvent(
+                            message=f"Task {task_id} not in this match",
+                            code="INVALID_TASK",
+                        ).model_dump(),
+                    )
+                    return
+
                 # Процесс ответа
                 is_correct, new_score = await process_answer(
                     match_id, user_id, task_id, answer, session
                 )
+
+                # КРИТИЧНО: Коммитим ответ СРАЗУ чтобы он не потерялся
+                # если дальше будет ошибка в check_match_completion или finalize_match
+                await session.commit()
+                logger.debug(f"Answer committed for user {user_id} on task {task_id}")
 
                 # Отправить результат игроку
                 await manager.send_personal(
@@ -305,7 +332,7 @@ async def handle_message(
                             ).model_dump(),
                         )
 
-                # Проверить завершён ли матч
+                # Проверить завершён ли матч (в новой транзакции)
                 is_complete = await check_match_completion(match_id, session)
                 logger.info(f"Match {match_id} completion check after answer: is_complete={is_complete}")
 
@@ -332,8 +359,6 @@ async def handle_message(
                     )
 
                     logger.info(f"Match {match_id} finished normally")
-                else:
-                    await session.commit()
 
             except ValueError as e:
                 logger.error(f"Error processing answer: {e}")
