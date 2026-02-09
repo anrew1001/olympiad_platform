@@ -16,6 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Скопировать код
 COPY backend/ .
 
+# Скопировать data директорию с задачами
+COPY data/ /data/
+
 # Создать .env из environment variables при запуске
 # (pydantic_settings будет читать из переменных окружения если .env не существует)
 

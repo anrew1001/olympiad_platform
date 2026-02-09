@@ -43,6 +43,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
+      - ./data:/data
     networks:
       - olympiad_network
     healthcheck:
