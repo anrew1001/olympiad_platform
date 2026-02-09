@@ -1,0 +1,84 @@
+services:
+  # ============================================
+  # Backend API (FastAPI + WebSocket)
+  # ============================================
+  - type: web
+    name: olympeit-backend
+    runtime: python
+    pythonVersion: 3.12
+
+    buildCommand: |
+      cd backend && pip install -r requirements.txt
+
+    startCommand: |
+      cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+
+    healthCheckPath: /docs
+    healthCheckStartupTimeout: 300
+
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: olympeit-postgres
+          property: connectionString
+
+      - key: SECRET_KEY
+        generateValue: true
+
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 30
+
+      - key: DISCONNECT_TIMEOUT_SECONDS
+        value: 30
+
+      - key: FRONTEND_URL
+        value: https://olympeit-frontend.onrender.com
+
+    # Render free tier: $5/месяц достаточно для backend
+    plan: free
+    numInstances: 1
+
+  # ============================================
+  # Frontend (Next.js с SSR)
+  # ============================================
+  - type: web
+    name: olympeit-frontend
+    runtime: node
+    nodeVersion: 20.x  # или 22.x/24.x если нужны новые фичи
+
+    buildCommand: |
+      cd frontend && npm install && npm run build
+
+    startCommand: |
+      cd frontend && npm start -- -p $PORT
+
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://olympeit-backend.onrender.com
+
+      - key: NEXT_PUBLIC_WS_URL
+        value: wss://olympeit-backend.onrender.com
+
+      - key: NODE_ENV
+        value: production
+
+      - key: NEXT_TELEMETRY_DISABLED
+        value: 1
+
+    # Render free tier: $5/месяц достаточно для frontend
+    plan: free
+    numInstances: 1
+
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  - type: pserv
+    name: olympeit-postgres
+    ipAllowList: []
+    databaseName: olympiad
+    databaseUser: olympiad
+    # Пароль генерируется автоматически Render
+
+    # Free: 90 дней бесплатно, потом ~$15/месяц
+    # Для production лучше использовать платный план
+    plan: free
