@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Установить зависимости системы
 RUN apt-get update && apt-get install -y \
-    gcc \
+    gcc curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Скопировать requirements
@@ -16,12 +16,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Скопировать код
 COPY backend/ .
 
+# Создать .env из environment variables при запуске
+# (pydantic_settings будет читать из переменных окружения если .env не существует)
+
 # Expose порт
 EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')" || exit 1
+    CMD curl -f http://localhost:8000/docs || exit 1
 
 # Команда запуска
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

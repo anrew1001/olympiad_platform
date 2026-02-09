@@ -28,11 +28,11 @@ class Settings(BaseSettings):
     FLAPPING_MAX_DISCONNECTS: int = 3  # Max disconnects before penalty
     FLAPPING_PENALTY_MULTIPLIER: float = 0.5  # Reduce timeout by 50% if flapping
 
-    # Конфигурация для загрузки из .env файла
+    # Конфигурация для загрузки из environment variables
+    # .env файл используется локально, в Docker используются env vars из docker-compose.yml
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False
+        case_sensitive=False,
+        extra="ignore"
     )
 
 
