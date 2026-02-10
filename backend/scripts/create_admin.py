@@ -43,7 +43,7 @@ async def create_admin_user():
         # Создать нового админа
         admin = User(
             username="admin",
-            email="admin@olympiad.local",
+            email="admin@gmail.com",
             hashed_password=hash_password("admin123"),  # Пароль: admin123
             role="admin",
             rating=1500,
@@ -56,7 +56,7 @@ async def create_admin_user():
         print("✅ Админ пользователь создан!")
         print(f"   Username: admin")
         print(f"   Password: admin123")
-        print(f"   Email: admin@olympiad.local")
+        print(f"   Email: admin@gmail.com")
         print(f"   ID: {admin.id}")
         print("")
         print("⚠️  ВАЖНО: Смените пароль после первого входа!")
