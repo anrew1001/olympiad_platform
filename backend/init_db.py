@@ -12,7 +12,8 @@ from pathlib import Path
 from sqlalchemy import select, func, delete
 
 from app.database import async_session_maker, init_db
-from app.models import Task
+from app.models import Task, User
+from app.utils.auth import hash_password
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -90,6 +91,36 @@ async def load_tasks_from_json() -> None:
         sys.exit(1)
 
 
+async def create_admin_user() -> None:
+    """Создает админ пользователя если его еще нет."""
+    try:
+        async with async_session_maker() as session:
+            # Проверяем существует ли уже админ
+            result = await session.execute(select(User).where(User.username == "admin"))
+            existing_admin = result.scalar_one_or_none()
+
+            if existing_admin:
+                logger.info(f"✓ Админ уже существует (ID: {existing_admin.id})")
+                return
+
+            # Создаем админа
+            admin = User(
+                username="admin",
+                email="admin@example.com",
+                hashed_password=hash_password("admin123"),
+                role="admin",
+                rating=1500,
+            )
+
+            session.add(admin)
+            await session.commit()
+            logger.info("✓ Админ создан: admin / admin123")
+
+    except Exception as e:
+        logger.warning(f"⚠ Ошибка создания админа: {e}")
+
+
 if __name__ == "__main__":
     asyncio.run(load_tasks_from_json())
+    asyncio.run(create_admin_user())
     logger.info("✓ Инициализация завершена успешно!")

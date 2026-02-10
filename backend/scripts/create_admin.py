@@ -43,7 +43,7 @@ async def create_admin_user():
         # Создать нового админа
         admin = User(
             username="admin",
-            email="admin@gmail.com",
+            email="admin@olympiad.local",
             hashed_password=hash_password("admin123"),  # Пароль: admin123
             role="admin",
             rating=1500,
