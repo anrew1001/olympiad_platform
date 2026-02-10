@@ -106,7 +106,7 @@ async def create_admin_user() -> None:
             # Создаем админа
             admin = User(
                 username="admin",
-                email="admin@example.com",
+                email="admin@gmail.com",
                 hashed_password=hash_password("admin123"),
                 role="admin",
                 rating=1500,
