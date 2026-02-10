@@ -1,0 +1,1 @@
+"""Тесты для olympiad platform."""

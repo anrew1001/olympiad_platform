@@ -1,0 +1,48 @@
+# Documentation files
+DOCKER_SETUP.md
+DATABASE_MIGRATION.md
+IMPLEMENTATION_GUIDE.md
+IMPLEMENTATION_REPORT.md
+IMPLEMENTATION_SUMMARY.md
+PHASE_4_SUMMARY.md
+SETUP.md
+TASKS_CATALOG_SETUP.md
+important_cmds.md
+
+# Test scripts
+quick_test_stats.sh
+test_detailed_stats.sh
+test_pvp_api_quick.sh
+test_pvp_matchmaking.sh
+
+# Local docker-compose files
+docker-compose.local.yml
+docker-compose.yml
+
+# Data directories
+postgres_data/
+data/
+archive/
+
+# Cache and build artifacts
+node_modules/
+__pycache__/
+.pytest_cache/
+.next/
+build/
+dist/
+
+# Environment files
+.env.example
+.env.production
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

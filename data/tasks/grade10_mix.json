@@ -1,0 +1,845 @@
+[
+  {
+    "subject": "informatics",
+    "topic": "graphs",
+    "difficulty": 3,
+    "title": "Кратчайший путь в метро",
+    "text": "Дан неориентированный невзвешенный граф станций метро. Найдите длину кратчайшего пути между станциями S и T.\nВходные данные: N, M, список рёбер, затем S и T.\nВыходные данные: длина кратчайшего пути или -1.",
+    "input_format": "1 <= N <= 2*10^5, 0 <= M <= 3*10^5",
+    "output_format": "Одно целое число",
+    "answer": "BFS от S, ответ dist[T] или -1.",
+    "hints": [
+      "Для невзвешенного графа используйте BFS",
+      "Инициализируйте dist значением -1"
+    ],
+    "source": "informatics.mccme.ru, графы"
+  },
+  {
+    "subject": "informatics",
+    "topic": "graphs",
+    "difficulty": 4,
+    "title": "Восстановление пути в лабиринте",
+    "text": "По карте N x M из символов '.', '#', 'S', 'F' найдите кратчайший путь из S в F.\nВходные данные: N, M и карта.\nВыходные данные: длина пути и строка UDLR, либо -1.",
+    "input_format": "1 <= N, M <= 1000",
+    "output_format": "-1 или длина и путь",
+    "answer": "BFS + массив предков и направления.",
+    "hints": [
+      "Храните предка каждой клетки",
+      "Восстановите путь от F к S"
+    ],
+    "source": "informatics.mccme.ru, BFS"
+  },
+  {
+    "subject": "informatics",
+    "topic": "graphs",
+    "difficulty": 4,
+    "title": "Топологический порядок проектов",
+    "text": "Дан ориентированный граф зависимостей. Постройте топологический порядок или определите, что это невозможно.\nВходные данные: N, M и рёбра u->v.\nВыходные данные: порядок или -1.",
+    "input_format": "1 <= N <= 2*10^5, 0 <= M <= 3*10^5",
+    "output_format": "Перестановка 1..N или -1",
+    "answer": "Алгоритм Кана.",
+    "hints": [
+      "В очередь кладите вершины с in-degree 0",
+      "Если обработали меньше N, есть цикл"
+    ],
+    "source": "informatics.mccme.ru, DFS/топсорт"
+  },
+  {
+    "subject": "informatics",
+    "topic": "graphs",
+    "difficulty": 5,
+    "title": "Мосты в дорожной сети",
+    "text": "В неориентированном графе найдите все мосты.\nВходные данные: N, M, список рёбер.\nВыходные данные: количество и индексы мостов.",
+    "input_format": "1 <= N <= 2*10^5, 0 <= M <= 2*10^5",
+    "output_format": "Количество и список индексов",
+    "answer": "DFS с tin/low.",
+    "hints": [
+      "Мост если low[to] > tin[v]"
+    ],
+    "source": "informatics.mccme.ru, графы"
+  },
+  {
+    "subject": "informatics",
+    "topic": "graphs",
+    "difficulty": 5,
+    "title": "Точки сочленения кампуса",
+    "text": "В графе корпусов и переходов найдите все точки сочленения.\nВходные данные: N, M и рёбра.\nВыходные данные: количество и вершины.",
+    "input_format": "1 <= N <= 2*10^5",
+    "output_format": "Количество и вершины",
+    "answer": "DFS с tin/low, особый случай для корня.",
+    "hints": [
+      "Для корня минимум два сына"
+    ],
+    "source": "informatics.mccme.ru, графы"
+  },
+  {
+    "subject": "informatics",
+    "topic": "graphs",
+    "difficulty": 4,
+    "title": "Проверка двудольности графа дружбы",
+    "text": "Дан граф дружбы. Можно ли разбить вершины на две доли без внутренних рёбер?\nВходные данные: N, M и рёбра.\nВыходные данные: YES или NO.",
+    "input_format": "1 <= N <= 10^5",
+    "output_format": "YES/NO",
+    "answer": "2-раскраска BFS/DFS.",
+    "hints": [
+      "Проверяйте все компоненты"
+    ],
+    "source": "informatics.mccme.ru, графы"
+  },
+  {
+    "subject": "informatics",
+    "topic": "graphs",
+    "difficulty": 5,
+    "title": "Сильные компоненты и конденсация",
+    "text": "Для ориентированного графа найдите число рёбер в конденсации SCC.\nВходные данные: N, M и рёбра.\nВыходные данные: одно число.",
+    "input_format": "1 <= N <= 2*10^5",
+    "output_format": "Одно целое число",
+    "answer": "Косарайю/Тарьян + set рёбер между SCC.",
+    "hints": [
+      "Сначала выделите SCC"
+    ],
+    "source": "informatics.mccme.ru, графы"
+  },
+  {
+    "subject": "informatics",
+    "topic": "dp",
+    "difficulty": 4,
+    "title": "Черепаха и монеты",
+    "text": "Черепаха идёт по таблице N x M вправо/вниз. Найдите максимум монет до правого нижнего угла.\nВходные данные: N, M и матрица.\nВыходные данные: максимум.",
+    "input_format": "1 <= N, M <= 700",
+    "output_format": "Одно целое число",
+    "answer": "dp[i][j]=a[i][j]+max(dp[i-1][j],dp[i][j-1]).",
+    "hints": [
+      "Инициализируйте границы"
+    ],
+    "source": "informatics.mccme.ru, динамика"
+  },
+  {
+    "subject": "informatics",
+    "topic": "dp",
+    "difficulty": 5,
+    "title": "Рюкзак 0/1",
+    "text": "Даны предметы с весами и стоимостями, рюкзак вместимости W. Найдите максимум стоимости.\nВходные данные: N, W, массивы w_i, c_i.\nВыходные данные: максимум.",
+    "input_format": "1 <= N <= 300, 1 <= W <= 20000",
+    "output_format": "Одно целое число",
+    "answer": "Классический DP по i и w.",
+    "hints": [
+      "Переход: взять/не взять"
+    ],
+    "source": "informatics.mccme.ru, динамика"
+  },
+  {
+    "subject": "informatics",
+    "topic": "dp",
+    "difficulty": 5,
+    "title": "Рюкзак с восстановлением ответа",
+    "text": "Для задачи рюкзака восстановите индексы выбранных предметов.\nВходные данные: N, W, веса и стоимости.\nВыходные данные: стоимость и индексы.",
+    "input_format": "1 <= N <= 200, 1 <= W <= 10000",
+    "output_format": "Стоимость и индексы",
+    "answer": "Обратный проход по таблице dp.",
+    "hints": [
+      "Сравнивайте dp[i][w] и dp[i-1][w]"
+    ],
+    "source": "informatics.mccme.ru, динамика"
+  },
+  {
+    "subject": "informatics",
+    "topic": "dp",
+    "difficulty": 4,
+    "title": "Длина НВП",
+    "text": "Найдите длину наибольшей строго возрастающей подпоследовательности.\nВходные данные: N и массив.\nВыходные данные: длина.",
+    "input_format": "1 <= N <= 2*10^5",
+    "output_format": "Одно целое число",
+    "answer": "O(N log N) через tails.",
+    "hints": [
+      "Бинарный поиск по tails"
+    ],
+    "source": "informatics.mccme.ru, динамика"
+  },
+  {
+    "subject": "informatics",
+    "topic": "dp",
+    "difficulty": 5,
+    "title": "Редакционное расстояние",
+    "text": "Найдите расстояние Левенштейна между строками S и T.\nВходные данные: две строки.\nВыходные данные: одно число.",
+    "input_format": "|S|, |T| <= 5000",
+    "output_format": "Одно целое число",
+    "answer": "DP по префиксам.",
+    "hints": [
+      "3 операции: вставка, удаление, замена"
+    ],
+    "source": "informatics.mccme.ru, динамика"
+  },
+  {
+    "subject": "informatics",
+    "topic": "dp",
+    "difficulty": 4,
+    "title": "Кузнечик на ступеньках",
+    "text": "Кузнечик прыгает на 1 или 2 ступени. Сколько способов попасть на N-ю ступень?\nВходные данные: N.\nВыходные данные: число способов.",
+    "input_format": "1 <= N <= 90",
+    "output_format": "Одно целое число",
+    "answer": "dp[n]=dp[n-1]+dp[n-2].",
+    "hints": [
+      "Это Фибоначчи со сдвигом"
+    ],
+    "source": "informatics.mccme.ru, динамика"
+  },
+  {
+    "subject": "informatics",
+    "topic": "strings",
+    "difficulty": 3,
+    "title": "Подсчёт вхождений подстроки",
+    "text": "Даны S и P. Найдите число вхождений P в S (пересечения разрешены).\nВходные данные: S, P.\nВыходные данные: число.",
+    "input_format": "1 <= |S|,|P| <= 2*10^5",
+    "output_format": "Одно целое число",
+    "answer": "Префикс-функция или Z-функция.",
+    "hints": [
+      "Склейка P + '#' + S"
+    ],
+    "source": "informatics.mccme.ru, строки"
+  },
+  {
+    "subject": "informatics",
+    "topic": "strings",
+    "difficulty": 4,
+    "title": "Префикс-функция строки",
+    "text": "Для строки S вычислите массив префикс-функции.\nВходные данные: S.\nВыходные данные: массив pi.",
+    "input_format": "1 <= |S| <= 10^6",
+    "output_format": "Массив целых чисел",
+    "answer": "Линейный алгоритм КМП.",
+    "hints": [
+      "Переход j=pi[j-1] при несовпадении"
+    ],
+    "source": "informatics.mccme.ru, строки"
+  },
+  {
+    "subject": "informatics",
+    "topic": "strings",
+    "difficulty": 4,
+    "title": "Период строки",
+    "text": "Найдите длину минимального периода строки S.\nВходные данные: S.\nВыходные данные: длина периода.",
+    "input_format": "1 <= |S| <= 10^6",
+    "output_format": "Одно целое число",
+    "answer": "p=n-pi[n-1], если n%p==0, иначе n.",
+    "hints": [
+      "Используйте pi последнего символа"
+    ],
+    "source": "informatics.mccme.ru, строки"
+  },
+  {
+    "subject": "informatics",
+    "topic": "strings",
+    "difficulty": 5,
+    "title": "Поиск всех вхождений (КМП)",
+    "text": "Даны образец P и текст T. Выведите позиции всех вхождений P в T.\nВходные данные: P, T.\nВыходные данные: количество и позиции.",
+    "input_format": "1 <= |P|,|T| <= 10^6",
+    "output_format": "Число и список позиций",
+    "answer": "КМП за O(|P|+|T|).",
+    "hints": [
+      "Не откатывайтесь по тексту"
+    ],
+    "source": "informatics.mccme.ru, строки"
+  },
+  {
+    "subject": "informatics",
+    "topic": "strings",
+    "difficulty": 5,
+    "title": "Наибольшая общая подстрока",
+    "text": "Для строк S и T найдите длину наибольшей общей подстроки.\nВходные данные: S, T.\nВыходные данные: длина.",
+    "input_format": "1 <= |S|,|T| <= 2*10^5",
+    "output_format": "Одно целое число",
+    "answer": "Бинарный поиск + хеши.",
+    "hints": [
+      "Проверка длины через rolling hash"
+    ],
+    "source": "informatics.mccme.ru, строки"
+  },
+  {
+    "subject": "informatics",
+    "topic": "graphs",
+    "difficulty": 4,
+    "title": "Минимальный путь с весами",
+    "text": "Взвешенный граф дорог. Найдите кратчайшее расстояние из S в T.\nВходные данные: N, M, рёбра (u,v,w), S,T.\nВыходные данные: расстояние или -1.",
+    "input_format": "1 <= N <= 2*10^5, 1 <= w <= 10^9",
+    "output_format": "Одно целое число",
+    "answer": "Алгоритм Дейкстры.",
+    "hints": [
+      "Используйте приоритетную очередь"
+    ],
+    "source": "informatics.mccme.ru, графы"
+  },
+  {
+    "subject": "informatics",
+    "topic": "dp",
+    "difficulty": 5,
+    "title": "Разбиение на K групп",
+    "text": "Разбейте массив на K подряд идущих групп с минимальным штрафом.\nВходные данные: N, K, функция cost(l,r).\nВыходные данные: минимум.",
+    "input_format": "1 <= K <= N <= 4000",
+    "output_format": "Одно целое число",
+    "answer": "dp[k][i]=min(dp[k-1][j]+cost(j+1,i)).",
+    "hints": [
+      "База O(KN^2), затем оптимизации"
+    ],
+    "source": "informatics.mccme.ru, динамика"
+  },
+  {
+    "subject": "math",
+    "topic": "combinatorics",
+    "difficulty": 3,
+    "title": "Перестановки с ограничением",
+    "text": "Сколькими способами переставить 1,2,3,4,5 так, чтобы 1 и 2 не стояли рядом?\nВходные данные: нет.\nВыходные данные: число.",
+    "input_format": "Нет ввода",
+    "output_format": "Одно целое число",
+    "answer": "5! - 2*4! = 72.",
+    "hints": [
+      "Вычтите случаи с блоком (1,2)"
+    ],
+    "source": "problems.ru, комбинаторика"
+  },
+  {
+    "subject": "math",
+    "topic": "combinatorics",
+    "difficulty": 4,
+    "title": "Комитет из класса",
+    "text": "В классе 14 учеников (6 девочек). Сколькими способами выбрать 5 человек с не менее чем 2 девочками?\nВходные данные: нет.\nВыходные данные: число.",
+    "input_format": "Нет ввода",
+    "output_format": "Одно целое число",
+    "answer": "Сумма C(6,k)C(8,5-k), k=2..5.",
+    "hints": [
+      "Разбейте по k"
+    ],
+    "source": "problems.ru, комбинаторика"
+  },
+  {
+    "subject": "math",
+    "topic": "combinatorics",
+    "difficulty": 4,
+    "title": "Двоичные строки без 11",
+    "text": "Сколько двоичных строк длины n не содержат подстроку 11?\nВходные данные: n.\nВыходные данные: число.",
+    "input_format": "1 <= n <= 60",
+    "output_format": "Одно целое число",
+    "answer": "Фибоначчиево ДП.",
+    "hints": [
+      "Разделите по последнему символу"
+    ],
+    "source": "problems.ru, комбинаторика"
+  },
+  {
+    "subject": "math",
+    "topic": "combinatorics",
+    "difficulty": 5,
+    "title": "Раскраска вершин куба",
+    "text": "Сколько различных 2-раскрасок вершин куба с точностью до вращений?\nВходные данные: нет.\nВыходные данные: число.",
+    "input_format": "Нет ввода",
+    "output_format": "Одно целое число",
+    "answer": "Лемма Бёрнсайда.",
+    "hints": [
+      "Посчитайте фиксированные раскраски по типам вращений"
+    ],
+    "source": "problems.ru, олимпиадная комбинаторика"
+  },
+  {
+    "subject": "math",
+    "topic": "combinatorics",
+    "difficulty": 3,
+    "title": "Логическая формула",
+    "text": "Сколько наборов (A,B,C) делают истинной формулу (A->B) AND (B->C) AND A?\nВходные данные: нет.\nВыходные данные: число.",
+    "input_format": "Нет ввода",
+    "output_format": "Одно целое число",
+    "answer": "Только A=B=C=1.",
+    "hints": [
+      "Раскройте импликации"
+    ],
+    "source": "problems.ru, логика"
+  },
+  {
+    "subject": "math",
+    "topic": "number_theory",
+    "difficulty": 3,
+    "title": "Последняя цифра степени",
+    "text": "Найдите последнюю цифру числа 7^2026.\nВходные данные: нет.\nВыходные данные: цифра.",
+    "input_format": "Нет ввода",
+    "output_format": "Цифра 0..9",
+    "answer": "Цикл длины 4, ответ 9.",
+    "hints": [
+      "Изучите период по mod 10"
+    ],
+    "source": "problems.ru, теория чисел"
+  },
+  {
+    "subject": "math",
+    "topic": "number_theory",
+    "difficulty": 4,
+    "title": "Делимость выражения",
+    "text": "Докажите, что n^5 - n делится на 30 для любого целого n.\nВходные данные: нет.\nВыходные данные: YES.",
+    "input_format": "Нет ввода",
+    "output_format": "YES",
+    "answer": "Делимость на 2,3,5.",
+    "hints": [
+      "Разложите n(n-1)(n+1)(n^2+1)"
+    ],
+    "source": "problems.ru, теория чисел"
+  },
+  {
+    "subject": "math",
+    "topic": "number_theory",
+    "difficulty": 4,
+    "title": "Количество делителей",
+    "text": "Дано N. Найдите количество его натуральных делителей.\nВходные данные: N.\nВыходные данные: d(N).",
+    "input_format": "1 <= N <= 10^12",
+    "output_format": "Одно целое число",
+    "answer": "По разложению на простые множители.",
+    "hints": [
+      "Если N=pa.., ответ произведение (a_i+1)"
+    ],
+    "source": "problems.ru, теория чисел"
+  },
+  {
+    "subject": "math",
+    "topic": "number_theory",
+    "difficulty": 5,
+    "title": "Диофантово уравнение",
+    "text": "Найдите все целые решения 35x + 21y = 14.\nВходные данные: нет.\nВыходные данные: параметрическое решение.",
+    "input_format": "Нет ввода",
+    "output_format": "Формулы для x,y",
+    "answer": "x=-2+3t, y=4-5t.",
+    "hints": [
+      "Сначала поделите на НОД"
+    ],
+    "source": "problems.ru, теория чисел"
+  },
+  {
+    "subject": "math",
+    "topic": "number_theory",
+    "difficulty": 3,
+    "title": "Простые на отрезке",
+    "text": "Даны L и R. Найдите количество простых чисел на [L,R].\nВходные данные: L, R.\nВыходные данные: число.",
+    "input_format": "1 <= L <= R <= 10^7",
+    "output_format": "Одно целое число",
+    "answer": "Решето Эратосфена.",
+    "hints": [
+      "Отметьте составные"
+    ],
+    "source": "problems.ru, теория чисел"
+  },
+  {
+    "subject": "math",
+    "topic": "number_theory",
+    "difficulty": 4,
+    "title": "НОК и НОД трёх чисел",
+    "text": "Даны a,b,c. Найдите gcd(a,b,c) и lcm(a,b,c).\nВходные данные: a,b,c.\nВыходные данные: два числа.",
+    "input_format": "1 <= a,b,c <= 10^9",
+    "output_format": "Два целых числа",
+    "answer": "Через последовательные gcd/lcm.",
+    "hints": [
+      "lcm(x,y)=x/gcd(x,y)*y"
+    ],
+    "source": "problems.ru, теория чисел"
+  },
+  {
+    "subject": "math",
+    "topic": "stereometry",
+    "difficulty": 3,
+    "title": "Диагональ параллелепипеда",
+    "text": "Даны рёбра a,b,c прямоугольного параллелепипеда. Найдите его диагональ.\nВходные данные: a,b,c.\nВыходные данные: d.",
+    "input_format": "1 <= a,b,c <= 10^4",
+    "output_format": "Вещественное число",
+    "answer": "d=sqrt(a^2+b^2+c^2).",
+    "hints": [
+      "Пифагор в 3D"
+    ],
+    "source": "problems.ru, стереометрия"
+  },
+  {
+    "subject": "math",
+    "topic": "stereometry",
+    "difficulty": 4,
+    "title": "Угол прямой и плоскости",
+    "text": "В кубе найдите угол между AC1 и плоскостью ABCD.\nВходные данные: ребро a.\nВыходные данные: угол.",
+    "input_format": "1 <= a <= 10^4",
+    "output_format": "Вещественное число",
+    "answer": "tan(phi)=1/sqrt(2).",
+    "hints": [
+      "Возьмите проекцию AC1 на основание"
+    ],
+    "source": "problems.ru, стереометрия"
+  },
+  {
+    "subject": "math",
+    "topic": "stereometry",
+    "difficulty": 4,
+    "title": "Сечение призмы",
+    "text": "В правильной треугольной призме плоскость проходит через вершину основания и противоположное ребро. Найдите площадь сечения.\nВходные данные: a,h.\nВыходные данные: площадь.",
+    "input_format": "1 <= a,h <= 10^4",
+    "output_format": "Вещественное число",
+    "answer": "Через геометрию сечения.",
+    "hints": [
+      "Постройте фигуру сечения"
+    ],
+    "source": "problems.ru, стереометрия"
+  },
+  {
+    "subject": "math",
+    "topic": "stereometry",
+    "difficulty": 5,
+    "title": "Угол между скрещивающимися прямыми",
+    "text": "В кубе найдите угол между AB1 и CD1.\nВходные данные: a.\nВыходные данные: угол.",
+    "input_format": "1 <= a <= 10^4",
+    "output_format": "Вещественное число",
+    "answer": "Через скалярное произведение векторов.",
+    "hints": [
+      "Задайте координаты вершин"
+    ],
+    "source": "problems.ru, стереометрия"
+  },
+  {
+    "subject": "math",
+    "topic": "stereometry",
+    "difficulty": 5,
+    "title": "Объём тетраэдра по координатам",
+    "text": "Даны координаты A,B,C,D. Найдите объём тетраэдра.\nВходные данные: координаты точек.\nВыходные данные: объём.",
+    "input_format": "|x|,|y|,|z| <= 10^4",
+    "output_format": "Вещественное число",
+    "answer": "V=|det(AB,AC,AD)|/6.",
+    "hints": [
+      "Используйте смешанное произведение"
+    ],
+    "source": "problems.ru, стереометрия"
+  },
+  {
+    "subject": "math",
+    "topic": "combinatorics",
+    "difficulty": 3,
+    "title": "Коды из букв",
+    "text": "Сколько пятибуквенных слов из A,B,C,D,E без повторений начинаются с A или E?\nВходные данные: нет.\nВыходные данные: число.",
+    "input_format": "Нет ввода",
+    "output_format": "Одно целое число",
+    "answer": "2*4! = 48.",
+    "hints": [
+      "Зафиксируйте первую букву"
+    ],
+    "source": "problems.ru, комбинаторика"
+  },
+  {
+    "subject": "math",
+    "topic": "number_theory",
+    "difficulty": 5,
+    "title": "Сравнение по модулю",
+    "text": "Решите 17x ≡ 5 (mod 29).\nВходные данные: нет.\nВыходные данные: минимальный x >= 0.",
+    "input_format": "Нет ввода",
+    "output_format": "Одно целое число",
+    "answer": "x=2.",
+    "hints": [
+      "Найдите обратный элемент к 17 по mod 29"
+    ],
+    "source": "problems.ru, теория чисел"
+  },
+  {
+    "subject": "math",
+    "topic": "combinatorics",
+    "difficulty": 4,
+    "title": "Размещения с повторениями",
+    "text": "Сколько четырёхзначных чисел из цифр 1..5 делятся на 5?\nВходные данные: нет.\nВыходные данные: число.",
+    "input_format": "Нет ввода",
+    "output_format": "Одно целое число",
+    "answer": "5^3 = 125.",
+    "hints": [
+      "Последняя цифра фиксирована"
+    ],
+    "source": "problems.ru, комбинаторика"
+  },
+  {
+    "subject": "math",
+    "topic": "stereometry",
+    "difficulty": 4,
+    "title": "Вписанная сфера в куб",
+    "text": "Найдите радиус вписанной в куб сферы и её объём.\nВходные данные: a.\nВыходные данные: r и V.",
+    "input_format": "1 <= a <= 10^4",
+    "output_format": "Два вещественных числа",
+    "answer": "r=a/2, V=4/3*pi*r^3.",
+    "hints": [
+      "Диаметр равен ребру куба"
+    ],
+    "source": "problems.ru, стереометрия"
+  },
+  {
+    "subject": "physics",
+    "topic": "kinematics",
+    "difficulty": 3,
+    "title": "Равноускоренное движение",
+    "text": "Тело стартует из покоя с ускорением a. Найдите путь за время t.\nВходные данные: a, t.\nВыходные данные: s.",
+    "input_format": "a (м/с^2), t (с)",
+    "output_format": "s в метрах",
+    "answer": "s = a t^2 / 2.",
+    "hints": [
+      "Формула для v0=0"
+    ],
+    "source": "physolymp.ru, механика"
+  },
+  {
+    "subject": "physics",
+    "topic": "kinematics",
+    "difficulty": 4,
+    "title": "Встреча двух поездов",
+    "text": "Поезда движутся навстречу со скоростями v1 и v2, расстояние L. Найдите время встречи и пути поездов.\nВходные данные: v1,v2,L.\nВыходные данные: t,s1,s2.",
+    "input_format": "v1,v2,L > 0",
+    "output_format": "Три вещественных числа",
+    "answer": "t=L/(v1+v2), s1=v1t, s2=v2t.",
+    "hints": [
+      "Относительная скорость v1+v2"
+    ],
+    "source": "4ipho.ru, кинематика"
+  },
+  {
+    "subject": "physics",
+    "topic": "dynamics",
+    "difficulty": 4,
+    "title": "Брусок на наклонной плоскости",
+    "text": "Брусок массы m на плоскости угла alpha, трение mu. Найдите ускорение вдоль плоскости.\nВходные данные: m,alpha,mu,g.\nВыходные данные: a.",
+    "input_format": "0<alpha<90°, mu>=0",
+    "output_format": "Одно вещественное число",
+    "answer": "a=g(sin alpha - mu cos alpha).",
+    "hints": [
+      "Спроецируйте силы"
+    ],
+    "source": "physolymp.ru, динамика"
+  },
+  {
+    "subject": "physics",
+    "topic": "dynamics",
+    "difficulty": 5,
+    "title": "Машина Атвуда",
+    "text": "Два груза m1,m2 через блок. Найдите ускорение и натяжение нити.\nВходные данные: m1,m2,g.\nВыходные данные: a,T.",
+    "input_format": "m1,m2>0",
+    "output_format": "Два вещественных числа",
+    "answer": "a=(m2-m1)g/(m1+m2), T=2m1m2g/(m1+m2).",
+    "hints": [
+      "Составьте уравнения Ньютона"
+    ],
+    "source": "4ipho.ru, динамика"
+  },
+  {
+    "subject": "physics",
+    "topic": "conservation",
+    "difficulty": 4,
+    "title": "Неупругое столкновение",
+    "text": "m1 со скоростью v1 сталкивается с покоящимся m2 и слипается с ним. Найдите скорость после удара.\nВходные данные: m1,m2,v1.\nВыходные данные: v.",
+    "input_format": "m1,m2>0",
+    "output_format": "Одно вещественное число",
+    "answer": "v=m1v1/(m1+m2).",
+    "hints": [
+      "Сохранение импульса"
+    ],
+    "source": "physolymp.ru, законы сохранения"
+  },
+  {
+    "subject": "physics",
+    "topic": "conservation",
+    "difficulty": 5,
+    "title": "Баллистический маятник",
+    "text": "Пуля массы m застревает в бруске M, система поднимается на высоту h. Найдите скорость пули.\nВходные данные: m,M,h,g.\nВыходные данные: u.",
+    "input_format": "m,M,h>0",
+    "output_format": "Одно вещественное число",
+    "answer": "u=(M+m)/m*sqrt(2gh).",
+    "hints": [
+      "Импульс + энергия"
+    ],
+    "source": "4ipho.ru, механика"
+  },
+  {
+    "subject": "physics",
+    "topic": "thermodynamics",
+    "difficulty": 3,
+    "title": "Уравнение Менделеева-Клапейрона",
+    "text": "Для идеального газа даны p,V,T. Найдите количество вещества nu.\nВходные данные: p,V,T,R.\nВыходные данные: nu.",
+    "input_format": "p в Па, V в м^3, T в К",
+    "output_format": "Одно вещественное число",
+    "answer": "nu=pV/(RT).",
+    "hints": [
+      "pV=nuRT"
+    ],
+    "source": "physolymp.ru, молекулярная физика"
+  },
+  {
+    "subject": "physics",
+    "topic": "thermodynamics",
+    "difficulty": 4,
+    "title": "Изобарное нагревание",
+    "text": "Одноатомный идеальный газ нагревают при постоянном давлении от T1 до T2. Найдите A и DeltaU.\nВходные данные: nu,T1,T2,R.\nВыходные данные: A,DeltaU.",
+    "input_format": "nu>0",
+    "output_format": "Два вещественных числа",
+    "answer": "A=nuRΔT, ΔU=3/2 nuRΔT.",
+    "hints": [
+      "Для одноатомного газа U=3/2nuRT"
+    ],
+    "source": "4ipho.ru, термодинамика"
+  },
+  {
+    "subject": "physics",
+    "topic": "thermodynamics",
+    "difficulty": 5,
+    "title": "Цикл Карно",
+    "text": "Машина Карно работает между T1 и T2. Найдите КПД.\nВходные данные: T1,T2.\nВыходные данные: eta в процентах.",
+    "input_format": "T1>T2>0",
+    "output_format": "Одно вещественное число",
+    "answer": "eta=(T1-T2)/T1*100%.",
+    "hints": [
+      "Температуры в Кельвинах"
+    ],
+    "source": "physolymp.ru, термодинамика"
+  },
+  {
+    "subject": "physics",
+    "topic": "thermodynamics",
+    "difficulty": 4,
+    "title": "Смешивание воды",
+    "text": "Смешивают m1 кг воды t1 и m2 кг воды t2. Потерь тепла нет. Найдите конечную температуру.\nВходные данные: m1,t1,m2,t2.\nВыходные данные: t.",
+    "input_format": "m1,m2>0",
+    "output_format": "Одно вещественное число",
+    "answer": "t=(m1t1+m2t2)/(m1+m2).",
+    "hints": [
+      "Баланс теплоты"
+    ],
+    "source": "physolymp.ru, термодинамика"
+  },
+  {
+    "subject": "physics",
+    "topic": "electrostatics",
+    "difficulty": 3,
+    "title": "Закон Кулона",
+    "text": "Два точечных заряда q1,q2 на расстоянии r. Найдите модуль силы.\nВходные данные: q1,q2,r,k.\nВыходные данные: F.",
+    "input_format": "r>0",
+    "output_format": "Одно вещественное число",
+    "answer": "F=k|q1q2|/r^2.",
+    "hints": [
+      "Используйте СИ"
+    ],
+    "source": "4ipho.ru, электростатика"
+  },
+  {
+    "subject": "physics",
+    "topic": "electrostatics",
+    "difficulty": 4,
+    "title": "Потенциал точечного заряда",
+    "text": "Найдите потенциал поля заряда q на расстоянии r.\nВходные данные: q,r,k.\nВыходные данные: phi.",
+    "input_format": "r>0",
+    "output_format": "Одно вещественное число",
+    "answer": "phi=kq/r.",
+    "hints": [
+      "Потенциал скалярен"
+    ],
+    "source": "physolymp.ru, электростатика"
+  },
+  {
+    "subject": "physics",
+    "topic": "electrostatics",
+    "difficulty": 5,
+    "title": "Работа поля",
+    "text": "Заряд q перемещают из потенциала phi1 в phi2. Найдите работу поля.\nВходные данные: q,phi1,phi2.\nВыходные данные: A.",
+    "input_format": "q в Кл, phi в В",
+    "output_format": "Одно вещественное число",
+    "answer": "A=q(phi1-phi2).",
+    "hints": [
+      "Работа зависит от разности потенциалов"
+    ],
+    "source": "4ipho.ru, электростатика"
+  },
+  {
+    "subject": "physics",
+    "topic": "kinematics",
+    "difficulty": 3,
+    "title": "Бросок вверх",
+    "text": "Тело бросили вертикально вверх со скоростью v0. Найдите hmax и время подъёма.\nВходные данные: v0,g.\nВыходные данные: hmax,t.",
+    "input_format": "v0>0, g>0",
+    "output_format": "Два вещественных числа",
+    "answer": "hmax=v0^2/(2g), t=v0/g.",
+    "hints": [
+      "В верхней точке v=0"
+    ],
+    "source": "physolymp.ru, кинематика"
+  },
+  {
+    "subject": "physics",
+    "topic": "dynamics",
+    "difficulty": 4,
+    "title": "Центростремительное ускорение",
+    "text": "Тело движется по окружности радиуса R со скоростью v. Найдите a и F для массы m.\nВходные данные: v,R,m.\nВыходные данные: a,F.",
+    "input_format": "R>0",
+    "output_format": "Два вещественных числа",
+    "answer": "a=v^2/R, F=mv^2/R.",
+    "hints": [
+      "Сила направлена к центру"
+    ],
+    "source": "4ipho.ru, динамика"
+  },
+  {
+    "subject": "physics",
+    "topic": "conservation",
+    "difficulty": 4,
+    "title": "Энергия пружины",
+    "text": "Пружину жёсткости k сжали на x. Найдите энергию и максимальную скорость тела массы m.\nВходные данные: k,x,m.\nВыходные данные: E,vmax.",
+    "input_format": "k,x,m>0",
+    "output_format": "Два вещественных числа",
+    "answer": "E=kx^2/2, vmax=sqrt(2E/m).",
+    "hints": [
+      "Закон сохранения энергии"
+    ],
+    "source": "physolymp.ru, законы сохранения"
+  },
+  {
+    "subject": "physics",
+    "topic": "thermodynamics",
+    "difficulty": 5,
+    "title": "Политропический процесс",
+    "text": "Идеальный газ: pV^n=const, объём V1->V2. Найдите работу газа.\nВходные данные: p1,V1,V2,n.\nВыходные данные: A.",
+    "input_format": "n != 1",
+    "output_format": "Одно вещественное число",
+    "answer": "A=(p2V2-p1V1)/(1-n), p2=p1(V1/V2)^n.",
+    "hints": [
+      "Проинтегрируйте p(V)"
+    ],
+    "source": "4ipho.ru, термодинамика"
+  },
+  {
+    "subject": "physics",
+    "topic": "electrostatics",
+    "difficulty": 4,
+    "title": "Конденсатор",
+    "text": "Плоский конденсатор ёмкости C заряжен до U. Найдите q и W.\nВходные данные: C,U.\nВыходные данные: q,W.",
+    "input_format": "C>0",
+    "output_format": "Два вещественных числа",
+    "answer": "q=CU, W=CU^2/2.",
+    "hints": [
+      "Базовые формулы конденсатора"
+    ],
+    "source": "physolymp.ru, электростатика"
+  },
+  {
+    "subject": "physics",
+    "topic": "electrostatics",
+    "difficulty": 5,
+    "title": "Нулевая точка поля двух зарядов",
+    "text": "На прямой два заряда q1 и q2 на расстоянии d. Найдите точки, где E=0.\nВходные данные: q1,q2,d.\nВыходные данные: координата(ы) или NO.",
+    "input_format": "d>0",
+    "output_format": "Координата(ы)",
+    "answer": "Решить равенство модулей полей по случаям знаков.",
+    "hints": [
+      "Разберите области слева, между и справа"
+    ],
+    "source": "4ipho.ru, электростатика"
+  },
+  {
+    "subject": "physics",
+    "topic": "conservation",
+    "difficulty": 5,
+    "title": "Петля и минимальная высота",
+    "text": "Тело без трения проходит вертикальную петлю радиуса R. Найдите минимальную стартовую высоту h_min.\nВходные данные: R,g.\nВыходные данные: h_min.",
+    "input_format": "R>0",
+    "output_format": "Одно вещественное число",
+    "answer": "h_min=5R/2.",
+    "hints": [
+      "Условие контакта в верхней точке: v^2>=gR"
+    ],
+    "source": "physolymp.ru, механика"
+  }
+]
