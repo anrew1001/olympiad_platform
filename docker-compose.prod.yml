@@ -1,17 +1,16 @@
 version: '3.8'
 
 services:
-  # PostgreSQL БД - основное хранилище данных
+  # PostgreSQL БД
   postgres:
     image: postgres:16-alpine
-    container_name: olympiad_postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-olympiad}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-olympiad}
       POSTGRES_DB: ${POSTGRES_DB:-olympiad}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -19,71 +18,39 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - olympiad_network
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 1G
 
-  # FastAPI Backend с Gunicorn + Uvicorn
+  # FastAPI Backend
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: olympiad_backend
     restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://olympiad:olympiad@postgres:5432/olympiad}
       SECRET_KEY: ${SECRET_KEY}
       ALGORITHM: ${ALGORITHM:-HS256}
       ACCESS_TOKEN_EXPIRE_HOURS: ${ACCESS_TOKEN_EXPIRE_HOURS:-24}
-      ENVIRONMENT: ${ENVIRONMENT:-production}
+      ENVIRONMENT: production
     ports:
-      - "${API_PORT:-8000}:8000"
+      - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./backend/app:/app/app:ro
-    networks:
-      - olympiad_network
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-        reservations:
-          memory: 512M
 
   # Next.js Frontend
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: olympiad_frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://backend:8000}
       NODE_ENV: production
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "3000:3000"
     depends_on:
       - backend
-    networks:
-      - olympiad_network
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
 
 volumes:
   postgres_data:
     driver: local
-
-networks:
-  olympiad_network:
-    driver: bridge
