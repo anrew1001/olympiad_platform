@@ -1,26 +1,32 @@
 import logging
 import os
+import sys
+
+# print("===== DEBUG: main.py loading =====", file=sys.stderr)
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import ORJSONResponse
+from fastapi.responses import JSONResponse
 
 from app.database import init_db
 from app.routers import health_router, auth_router, tasks_router, users_router, admin_router, matches_router, pvp_router
 from app.websocket.pvp import router as websocket_router
 from app.routers.stats import router as stats_router
 
+# print("===== DEBUG: imports done =====", file=sys.stderr)
 
 # Логирование
 logger = logging.getLogger(__name__)
 
 # Создание FastAPI приложения
+# print("===== DEBUG: creating FastAPI app =====", file=sys.stderr)
 app = FastAPI(
     title="Olympiad Platform API",
     description="API для олимпиадной платформы",
     version="1.0.0",
-    default_response_class=ORJSONResponse,
+    default_response_class=JSONResponse,
 )
+# print("===== DEBUG: FastAPI app created =====", file=sys.stderr)
 
 
 # Конфигурация CORS
@@ -50,18 +56,16 @@ app.add_middleware(
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     """Логирует запросы и ответы для отладки CORS проблем."""
-    logger.info(f"🔵 Request: {request.method} {request.url.path}")
-    logger.info(f"   Origin: {request.headers.get('Origin', 'NO ORIGIN HEADER')}")
-    logger.info(f"   Headers: {dict(request.headers)}")
+    print(f"🔵 Request: {request.method} {request.url.path}")
 
     try:
         response = await call_next(request)
-        logger.info(f"🟢 Response status: {response.status_code}")
-        logger.info(f"   CORS header: {response.headers.get('access-control-allow-origin', 'NO CORS HEADER')}")
-        logger.info(f"   All response headers: {dict(response.headers)}")
+        print(f"🟢 Response status: {response.status_code}")
         return response
     except Exception as e:
-        logger.error(f"🔴 Exception in request handler: {e}", exc_info=True)
+        print(f"🔴 Exception: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
         raise
 
 

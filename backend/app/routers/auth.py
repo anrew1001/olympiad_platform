@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -8,6 +9,8 @@ from app.models import User
 from app.schemas.user import UserCreate, UserResponse, LoginRequest, TokenResponse
 from app.utils.auth import hash_password, verify_password, create_access_token
 from app.dependencies.auth import get_current_user
+
+logger = logging.getLogger(__name__)
 
 
 # API роутер для аутентификации и регистрации
@@ -113,10 +116,13 @@ async def login(
         независимо от того, что именно неверно - email или пароль.
         Это защищает от username enumeration attack (перебора существующих email).
     """
+    logger.info(f"Login attempt for email: {login_data.email}")
+
     # Ищем пользователя по email в БД
     query = select(User).where(User.email == login_data.email)
     result = await db.execute(query)
     user = result.scalar_one_or_none()
+    logger.info(f"User found: {user is not None}")
 
     # КРИТИЧНО: Одинаковое сообщение для обоих случаев (защита от username enumeration)
     # НЕ раскрываем, существует ли пользователь с таким email или просто пароль неверный
@@ -137,6 +143,7 @@ async def login(
 
     # Создаём JWT токен с user_id и role в payload
     # ВАЖНО: В токене только user_id (в поле "sub") и role, никаких паролей или хешей!
+    logger.info(f"Creating access token for user {user.id}")
     access_token = create_access_token(
         data={
             "sub": str(user.id),
@@ -144,7 +151,10 @@ async def login(
         }
     )
 
-    return TokenResponse(access_token=access_token, token_type="bearer")
+    logger.info(f"Returning TokenResponse")
+    response = TokenResponse(access_token=access_token, token_type="bearer")
+    logger.info(f"TokenResponse created: {type(response)}")
+    return response
 
 
 @router.get(

@@ -14,6 +14,10 @@
 import asyncio
 import json
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Загрузить переменные окружения из .env файла
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 from sqlalchemy import and_, select
 
