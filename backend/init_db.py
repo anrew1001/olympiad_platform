@@ -120,7 +120,12 @@ async def create_admin_user() -> None:
         logger.warning(f"⚠ Ошибка создания админа: {e}")
 
 
-if __name__ == "__main__":
-    asyncio.run(load_tasks_from_json())
-    asyncio.run(create_admin_user())
+async def main() -> None:
+    """Main initialization function that runs both tasks in the same event loop."""
+    await load_tasks_from_json()
+    await create_admin_user()
     logger.info("✓ Инициализация завершена успешно!")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
