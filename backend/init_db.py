@@ -6,17 +6,34 @@
 import asyncio
 import json
 import logging
-import sys
 from pathlib import Path
 
-from sqlalchemy import select, func, delete
+from sqlalchemy import select, func, delete, text
 
-from app.database import async_session_maker, init_db
+from app.database import async_session_maker, init_db, async_engine
 from app.models import Task, User
 from app.utils.auth import hash_password
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+async def wait_for_db(max_retries: int = 30) -> bool:
+    """Ждет пока БД будет готова к подключению."""
+    for attempt in range(max_retries):
+        try:
+            async with async_engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+            logger.info("✓ База данных готова!")
+            return True
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logger.info(f"⏳ Попытка подключения {attempt + 1}/{max_retries}... (ошибка: {type(e).__name__})")
+                await asyncio.sleep(1)
+            else:
+                logger.error(f"❌ Не удалось подключиться к БД после {max_retries} попыток")
+                return False
+    return False
 
 
 async def load_tasks_from_json() -> None:
@@ -88,7 +105,8 @@ async def load_tasks_from_json() -> None:
 
     except Exception as e:
         logger.error(f"❌ Ошибка инициализации: {e}")
-        sys.exit(1)
+        return False
+    return True
 
 
 async def create_admin_user() -> None:
@@ -122,6 +140,11 @@ async def create_admin_user() -> None:
 
 async def main() -> None:
     """Main initialization function that runs both tasks in the same event loop."""
+    # Сначала ждем пока БД будет готова
+    if not await wait_for_db():
+        logger.warning("⚠ БД не готова, пропускаем инициализацию")
+        return
+
     await load_tasks_from_json()
     await create_admin_user()
     logger.info("✓ Инициализация завершена успешно!")
