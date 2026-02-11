@@ -30,7 +30,6 @@ COPY --from=builder /opt/venv /opt/venv
 
 # Копируем исходный код приложения backend
 COPY backend/app ./app
-COPY backend/scripts ./scripts
 
 # Копируем данные задач
 COPY data ./data
