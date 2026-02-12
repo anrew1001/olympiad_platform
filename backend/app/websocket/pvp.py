@@ -184,6 +184,74 @@ async def load_match_with_tasks(
     return match, tasks_info
 
 
+async def cleanup_orphaned_match(
+    match_id: int,
+    user_id: int,
+    session: AsyncSession,
+) -> bool:
+    """
+    Cleans up orphaned WAITING match when creator disconnects.
+
+    Only deletes matches that are:
+    - Status: WAITING
+    - player1_id == user_id (disconnecting user created it)
+    - player2_id IS NULL (no one joined)
+
+    Args:
+        match_id: ID of the match
+        user_id: ID of user who disconnected
+        session: AsyncSession for DB operations
+
+    Returns:
+        True if match was cleaned up, False otherwise
+    """
+    try:
+        # Lock and load match
+        result = await session.execute(
+            select(Match)
+            .where(Match.id == match_id)
+            .options(
+                noload(Match.player1),
+                noload(Match.player2),
+                noload(Match.winner),
+                noload(Match.tasks),
+                noload(Match.answers),
+            )
+            .with_for_update()
+        )
+        match = result.scalar_one_or_none()
+
+        if not match:
+            logger.debug(f"Match {match_id} not found for cleanup")
+            return False
+
+        # Only cleanup WAITING matches where user is player1 and player2 never joined
+        if (
+            match.status == MatchStatus.WAITING
+            and match.player1_id == user_id
+            and match.player2_id is None
+        ):
+            # Delete the match
+            await session.delete(match)
+            await session.commit()
+            logger.info(
+                f"Cleaned up orphaned WAITING match {match_id} "
+                f"after player1 {user_id} disconnected before anyone joined"
+            )
+            return True
+
+        logger.debug(
+            f"Match {match_id} not cleaned: status={match.status.value}, "
+            f"player1={match.player1_id}, player2={match.player2_id}"
+        )
+        return False
+
+    except Exception as e:
+        logger.error(f"Error cleaning up orphaned match {match_id}: {e}", exc_info=True)
+        await session.rollback()
+        return False
+
+
 async def handle_message(
     match_id: int,
     user_id: int,
@@ -670,10 +738,36 @@ async def websocket_endpoint(
             if match:
                 opponent_id = manager.get_opponent_id(match_id, user.id)
 
-                # Opponent никогда не подключался - просто cleanup, не technical error
+                # Opponent никогда не подключался - cleanup WebSocket and orphaned match
                 if opponent_id is None:
-                    logger.info(f"User {user.id} disconnected from match {match_id}, opponent never connected")
+                    logger.info(
+                        f"User {user.id} disconnected from match {match_id}, "
+                        f"opponent never connected - attempting orphaned match cleanup"
+                    )
                     manager.disconnect(match_id, user.id)
+
+                    # Cleanup orphaned WAITING match from database
+                    from app.database import async_session_maker
+                    async with async_session_maker() as session:
+                        try:
+                            was_cleaned = await cleanup_orphaned_match(
+                                match_id, user.id, session
+                            )
+                            if was_cleaned:
+                                logger.info(
+                                    f"Successfully cleaned up orphaned match {match_id} "
+                                    f"for user {user.id}"
+                                )
+                            else:
+                                logger.debug(
+                                    f"No cleanup needed for match {match_id} "
+                                    f"(may have been joined or already cleaned)"
+                                )
+                        except Exception as e:
+                            logger.error(
+                                f"Error during orphaned match cleanup for match {match_id}: {e}",
+                                exc_info=True
+                            )
 
                 # Opponent подключался - проверяем всё ли ещё подключён
                 elif manager.is_connected(match_id, opponent_id):

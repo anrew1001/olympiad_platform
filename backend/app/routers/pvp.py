@@ -115,10 +115,22 @@ async def cancel_find(
 
     Удаляет waiting-матч. Если пользователь не создал waiting-матч или
     его уже забрал другой игрок -- возвращает {"cancelled": false}.
+
+    Также очищает WebSocket state в ConnectionManager для этого матча.
     """
     match_id = await cancel_waiting_match(user_id=current_user.id, session=db)
 
     await db.commit()
+
+    # Cleanup WebSocket state if match was cancelled
+    if match_id is not None:
+        # Disconnect user from ConnectionManager if still connected
+        if manager.is_connected(match_id, current_user.id):
+            await manager.disconnect(match_id, current_user.id)
+            logger.info(
+                f"Cleaned up WebSocket state for user {current_user.id} "
+                f"from cancelled match {match_id}"
+            )
 
     return CancelResponse(cancelled=match_id is not None)
 

@@ -65,11 +65,18 @@ async def find_or_create_match(
     logger.debug(f"find_or_create_match: user_id={user_id}, rating={user_rating}")
 
     # ------------------------------------------------------------------
-    # Шаг 1: Guard -- пользователь уже в матче?
+    # Шаг 1: Guard -- пользователь уже в матче? (WITH FOR UPDATE TO PREVENT RACE)
     # ------------------------------------------------------------------
     logger.debug("Guard check: searching for existing match...")
     guard_stmt = (
-        select(Match.id)
+        select(Match)
+        .options(
+            noload(Match.player1),
+            noload(Match.player2),
+            noload(Match.winner),
+            noload(Match.tasks),
+            noload(Match.answers),
+        )
         .where(
             or_(
                 Match.player1_id == user_id,
@@ -78,15 +85,21 @@ async def find_or_create_match(
             Match.status.in_([MatchStatus.WAITING, MatchStatus.ACTIVE]),
         )
         .limit(1)
+        .with_for_update(skip_locked=True)
     )
     guard_result = await session.execute(guard_stmt)
-    if guard_result.scalar_one_or_none() is not None:
-        logger.debug(f"User {user_id} already in a match - 409")
+    existing_match = guard_result.scalar_one_or_none()
+    if existing_match is not None:
+        logger.info(
+            f"GUARD CHECK BLOCKED: user={user_id} already in match {existing_match.id} "
+            f"(status={existing_match.status.value}, player1={existing_match.player1_id}, "
+            f"player2={existing_match.player2_id})"
+        )
         raise HTTPException(
             status_code=409,
             detail="У вас уже есть активный или ожидающий матч",
         )
-    logger.debug("Guard check passed")
+    logger.debug(f"Guard check passed for user {user_id}")
 
     # ------------------------------------------------------------------
     # Шаг 2: FOR UPDATE -- ищем waiting-матч для подбора
@@ -132,6 +145,10 @@ async def find_or_create_match(
     # Шаг 3a: Матч найден -- забираем его
     # ------------------------------------------------------------------
     if waiting_match is not None:
+        logger.info(
+            f"MATCH JOINED: user={user_id} joined match {waiting_match.id} as player2. "
+            f"Opponent player1={waiting_match.player1_id}"
+        )
         waiting_match.player2_id = user_id
         waiting_match.status = MatchStatus.ACTIVE
 
@@ -158,6 +175,10 @@ async def find_or_create_match(
     # flush чтобы match.id был присвоен БД (autoincrement)
     # без flush match.id == None и роутер не может его вернуть
     await session.flush()
+
+    logger.info(
+        f"MATCH CREATED: user={user_id} created new WAITING match {new_match.id}"
+    )
 
     return new_match
 
@@ -268,6 +289,9 @@ async def cancel_waiting_match(
     match = lock_result.scalar_one_or_none()
 
     if match is None:
+        logger.debug(
+            f"Cancel attempt by user {user_id}: no WAITING match found to cancel"
+        )
         return None
 
     match_id = match.id
@@ -275,5 +299,9 @@ async def cancel_waiting_match(
     # DELETE через ORM: session.delete() безопасен.
     # Waiting-матч не имеет child rows (tasks добавляются только при переходе в active).
     session.delete(match)
+
+    logger.info(
+        f"MATCH CANCELLED: user={user_id} cancelled WAITING match {match_id}"
+    )
 
     return match_id
