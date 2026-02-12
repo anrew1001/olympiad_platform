@@ -298,7 +298,7 @@ async def cancel_waiting_match(
 
     # DELETE через ORM: session.delete() безопасен.
     # Waiting-матч не имеет child rows (tasks добавляются только при переходе в active).
-    session.delete(match)
+    await session.delete(match)
 
     logger.info(
         f"MATCH CANCELLED: user={user_id} cancelled WAITING match {match_id}"

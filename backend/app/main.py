@@ -196,7 +196,7 @@ async def startup_event() -> None:
 
             if orphaned:
                 for match in orphaned:
-                    session.delete(match)  # Sync method - NO await!
+                    await session.delete(match)  # AsyncSession.delete() IS async!
                 await session.commit()
                 logger.info(f"✓ Cleaned {len(orphaned)} orphaned matches on startup")
             else:
