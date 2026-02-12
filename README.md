@@ -18,7 +18,7 @@ git clone <repo-url>
 cd olympiad_platform
 
 # Запустить через Docker Compose
-docker-compose up -d
+docker-compose -f docker-compose.prod.yml up -d
 ```
 
 **Доступ:**
