@@ -29,6 +29,7 @@ docker-compose -f docker-compose.prod.yml up -d
 **Тестовый админ:**
 - Username: `admin`
 - Password: `admin123`
+- Email: `admin@gmail.com`
 
 ### Production
 
