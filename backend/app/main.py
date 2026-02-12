@@ -12,10 +12,11 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select, func, delete
 
 from app.database import init_db, async_session_maker
-from app.models import Task
+from app.models import Task, Match, MatchStatus
 from app.routers import health_router, auth_router, tasks_router, users_router, admin_router, matches_router, pvp_router
 from app.websocket.pvp import router as websocket_router
 from app.routers.stats import router as stats_router
+from datetime import datetime, timedelta
 
 # print("===== DEBUG: imports done =====", file=sys.stderr)
 
@@ -170,6 +171,41 @@ async def startup_event() -> None:
             logger.warning(f"⚠ Ошибка инициализации БД: {e}")
 
     # Задачи загружаются init_db.py перед стартом, поэтому здесь не нужно
+
+    # Очистка orphaned матчей при старте
+    # Примечание: этот код может не выполниться если БД еще не готова,
+    # но это не критично, т.к. cleanup также происходит при disconnect
+    try:
+        # Даем БД немного времени стабилизироваться после init_db
+        import asyncio
+        await asyncio.sleep(1)
+
+        async with async_session_maker() as session:
+            # Находим все WAITING матчи без второго игрока (старше 5 минут)
+            cutoff_time = datetime.utcnow() - timedelta(minutes=5)
+
+            result = await session.execute(
+                select(Match)
+                .where(
+                    Match.status == MatchStatus.WAITING,
+                    Match.player2_id.is_(None),
+                    Match.created_at < cutoff_time
+                )
+            )
+            orphaned = result.scalars().all()
+
+            if orphaned:
+                for match in orphaned:
+                    session.delete(match)  # Sync method - NO await!
+                await session.commit()
+                logger.info(f"✓ Cleaned {len(orphaned)} orphaned matches on startup")
+            else:
+                logger.info("✓ No orphaned matches found on startup")
+    except ConnectionRefusedError:
+        logger.info("⏳ БД еще не готова для cleanup, пропускаем")
+    except Exception as e:
+        # Не критичная ошибка - cleanup также происходит при disconnect
+        logger.info(f"⏳ Startup cleanup пропущен: {type(e).__name__}")
 
 
 # Подключение роутеров к приложению
