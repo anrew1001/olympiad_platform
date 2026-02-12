@@ -232,7 +232,7 @@ async def cleanup_orphaned_match(
             and match.player2_id is None
         ):
             # Delete the match
-            await session.delete(match)
+            session.delete(match)  # Sync method - NO await!
             await session.commit()
             logger.info(
                 f"Cleaned up orphaned WAITING match {match_id} "
