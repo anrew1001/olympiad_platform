@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { findMatch, cancelSearch, getMatch } from '@/lib/api/pvp';
+import { findMatch, cancelSearch } from '@/lib/api/pvp';
 
 type MatchmakingStatus = 'idle' | 'searching' | 'found' | 'error';
 
@@ -28,30 +28,25 @@ export function useMatchmaking() {
         setStatus('found');
       } else {
         // Ждём соперника (status === 'waiting')
-        // Начинаем polling
+        // Начинаем polling через POST /api/pvp/find каждые 3 сек
         setStatus('searching');
-        startPolling(response.match_id);
+        startPolling();
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       console.error('Find match error:', err, errorMessage);
 
-      // Если конфликт (уже есть матч), пробуем отменить и повторить
+      // 409 CONFLICT означает активный матч (уже играется)
       if (errorMessage.includes('CONFLICT') && !isRetry) {
-        console.log('Existing match found, canceling and retrying...');
+        console.log('Active match exists, canceling and retrying...');
         isRetryingRef.current = true;
         try {
           await cancelSearch();
-          // Повторяем поиск матча после небольшой задержки
           setTimeout(() => doFind(true), 300);
           return;
         } catch (cancelErr) {
           const cancelMessage = cancelErr instanceof Error ? cancelErr.message : 'Unknown error';
-          console.error('Failed to cancel existing match:', cancelMessage);
-          setError(`Не удалось отменить поиск: ${cancelMessage}`);
-          setStatus('error');
-          isRetryingRef.current = false;
-          return;
+          console.error('Failed to cancel:', cancelMessage);
         }
       }
 
@@ -59,7 +54,7 @@ export function useMatchmaking() {
       setStatus('error');
       isRetryingRef.current = false;
     }
-  }, []); // startPolling не нужен в deps т.к. он стабильный
+  }, []);
 
   const find = useCallback(async () => {
     setStatus('searching');
@@ -88,17 +83,20 @@ export function useMatchmaking() {
 
   // === Polling ===
 
-  const startPolling = useCallback((id: number) => {
-    // Простой polling каждые 2 сек для проверки статуса матча
-    // Если opponent присоединился, вернёт status='active'
+  const startPolling = useCallback(() => {
+    // Polling каждые 3 сек через POST /api/pvp/find
+    // Это позволяет серверу повторно искать соперника при каждом poll
+    // и решает race condition когда оба игрока создали WAITING матчи одновременно
     pollIntervalRef.current = setInterval(async () => {
       try {
-        const response = await getMatch(id);
-        console.log(`[Polling] Match ${id} status: ${response.status}`);
+        const response = await findMatch();
+        console.log(`[Polling] Match ${response.match_id} status: ${response.status}`);
+
+        setMatchId(response.match_id);
 
         if (response.status === 'active') {
           // Соперник найден!
-          console.log(`[Polling] Match ${id} is active! Transitioning to found.`);
+          console.log(`[Polling] Match ${response.match_id} is active! Transitioning to found.`);
           setStatus('found');
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current);
@@ -107,7 +105,7 @@ export function useMatchmaking() {
       } catch (err) {
         console.debug('Polling error:', err);
       }
-    }, 2000);
+    }, 3000);
   }, []);
 
   // === Cleanup ===

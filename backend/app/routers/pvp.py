@@ -73,24 +73,36 @@ async def find_match(
     await db.commit()
 
     # После commit: свежий SELECT с eager loading relationships
+    # populate_existing=True заставляет SQLAlchemy перезагрузить объект из БД,
+    # даже если он уже в session (с noload() из matching service)
     result = await db.execute(
         select(Match)
         .where(Match.id == match_id)
         .options(joinedload(Match.player1), joinedload(Match.player2))
+        .execution_options(populate_existing=True)
     )
-    match = result.scalar_one()  # Убрали unique() - оно ломает joinedload
+    match = result.unique().scalar_one()
 
-    # Построение response: opponent зависит от статуса
+    # Построение response: opponent зависит от статуса и позиции игрока
     opponent = None
     if match.status == MatchStatus.ACTIVE:
-        # Мы присоединились к матчу → мы player2, opponent = player1
-        # Проверяем что player1 загружен
-        if match.player1:
-            opponent = OpponentInfo(
-                id=match.player1.id,
-                username=match.player1.username,
-                rating=match.player1.rating,
-            )
+        # Определяем кто мы и кто opponent
+        if current_user.id == match.player1_id:
+            # Мы player1, opponent = player2
+            if match.player2 is not None:
+                opponent = OpponentInfo(
+                    id=match.player2.id,
+                    username=match.player2.username,
+                    rating=match.player2.rating,
+                )
+        else:
+            # Мы player2, opponent = player1
+            if match.player1 is not None:
+                opponent = OpponentInfo(
+                    id=match.player1.id,
+                    username=match.player1.username,
+                    rating=match.player1.rating,
+                )
 
     return MatchResponse(
         match_id=match.id,
