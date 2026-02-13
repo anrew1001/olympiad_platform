@@ -680,8 +680,19 @@ async def websocket_endpoint(
 
         # 6. If both connected -> activate match and send match_start to both
         if manager.is_both_connected(match_id):
-            # Load tasks
-            _, tasks_info = await load_match_with_tasks(match_id, async_session_maker())
+            # Load tasks and activate match
+            async with async_session_maker() as session:
+                try:
+                    # Load tasks
+                    _, tasks_info = await load_match_with_tasks(match_id, session)
+
+                    # Activate match (WAITING -> ACTIVE)
+                    await activate_match(match_id, session)
+                    await session.commit()
+                except Exception as e:
+                    logger.error(f"Error activating match {match_id}: {e}")
+                    await session.rollback()
+                    raise
 
             match_start_event = MatchStartEvent(tasks=tasks_info)
 
@@ -689,14 +700,6 @@ async def websocket_endpoint(
                 match_id,
                 match_start_event.model_dump(),
             )
-
-            # Activate match (WAITING -> ACTIVE)
-            async with async_session_maker() as session:
-                try:
-                    await activate_match(match_id, session)
-                    await session.commit()
-                except Exception as e:
-                    logger.error(f"Error activating match {match_id}: {e}")
 
             logger.info(f"Match {match_id} started (both players connected)")
 
@@ -747,7 +750,7 @@ async def websocket_endpoint(
                     manager.disconnect(match_id, user.id)
 
                     # Cleanup orphaned WAITING match from database
-                    from app.database import async_session_maker
+                    # Используем глобальный импорт async_session_maker (строка 14)
                     async with async_session_maker() as session:
                         try:
                             was_cleaned = await cleanup_orphaned_match(

@@ -85,11 +85,21 @@ async def load_tasks_from_json() -> None:
             with open(json_path, "r", encoding="utf-8") as f:
                 tasks_data = json.load(f)
 
+            # Маппинг subject: "math" из JSON -> "mathematics" в БД (для консистентности с фронтенд dropdown)
+            SUBJECT_MAPPING = {
+                "informatics": "informatics",
+                "math": "mathematics",  # JSON содержит "math", а фронтенд ожидает "mathematics"
+                "physics": "physics",
+            }
+
             # Добавляем все задачи
             tasks = []
             for task_data in tasks_data:
+                raw_subject = task_data.get("subject")
+                mapped_subject = SUBJECT_MAPPING.get(raw_subject, raw_subject)
+
                 task = Task(
-                    subject=task_data.get("subject"),
+                    subject=mapped_subject,
                     topic=task_data.get("topic"),
                     difficulty=task_data.get("difficulty"),
                     title=task_data.get("title"),
