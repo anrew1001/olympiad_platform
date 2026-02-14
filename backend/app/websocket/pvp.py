@@ -787,38 +787,40 @@ async def websocket_endpoint(
                         f"(flapping={is_flapping}, original={settings.DISCONNECT_TIMEOUT_SECONDS}s)"
                     )
 
-                    # Define timeout callback for forfeit
+                    # Define timeout callback for technical error (no rating change per spec)
                     async def disconnect_timeout_callback():
                         async with async_session_maker() as session:
                             try:
                                 logger.warning(
                                     f"Disconnect timeout expired for user {user.id} in match {match_id}. "
-                                    f"Finalizing as forfeit."
+                                    f"Finalizing as technical_error (no rating change per spec)."
                                 )
-                                result_data = await finalize_match_forfeit(
-                                    match_id, user.id, session
+                                await handle_technical_error(
+                                    match_id,
+                                    session,
+                                    f"Player {user.id} disconnected and failed to reconnect within timeout"
                                 )
                                 await session.commit()
 
-                                # Send match_end to remaining player
+                                # Send match_end to remaining player with no rating changes
                                 await manager.send_personal(
                                     match_id,
                                     opponent_id,
                                     MatchEndEvent(
-                                        reason="forfeit",
-                                        winner_id=result_data["winner_id"],
-                                        player1_rating_change=result_data["player1_rating_change"],
-                                        player1_new_rating=result_data["player1_new_rating"],
-                                        player2_rating_change=result_data["player2_rating_change"],
-                                        player2_new_rating=result_data["player2_new_rating"],
+                                        reason="technical_error",
+                                        winner_id=None,
+                                        player1_rating_change=0,
+                                        player1_new_rating=0,
+                                        player2_rating_change=0,
+                                        player2_new_rating=0,
                                         final_scores={
-                                            "player1_score": result_data["final_scores"]["player1_score"],
-                                            "player2_score": result_data["final_scores"]["player2_score"],
+                                            "player1_score": 0,
+                                            "player2_score": 0,
                                         },
                                     ).model_dump(),
                                 )
 
-                                logger.info(f"Forfeit match {match_id}: player {opponent_id} wins")
+                                logger.info(f"Technical error in match {match_id}: no rating changes applied")
                             except Exception as e:
                                 logger.error(f"Error in disconnect timeout: {e}")
 

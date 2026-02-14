@@ -15,12 +15,27 @@ export function useMatchmaking() {
   const [error, setError] = useState<string | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isRetryingRef = useRef(false);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isCancelledRef = useRef(false);
 
   // === Find Match ===
 
   const doFind = useCallback(async (isRetry = false) => {
+    // Проверка на отмену
+    if (isCancelledRef.current) {
+      console.log('Find cancelled, aborting');
+      return;
+    }
+
     try {
       const response = await findMatch();
+
+      // Повторная проверка на отмену после async операции
+      if (isCancelledRef.current) {
+        console.log('Find cancelled during request, aborting');
+        return;
+      }
+
       setMatchId(response.match_id);
 
       if (response.status === 'active') {
@@ -33,6 +48,12 @@ export function useMatchmaking() {
         startPolling();
       }
     } catch (err) {
+      // Проверка на отмену перед обработкой ошибки
+      if (isCancelledRef.current) {
+        console.log('Find cancelled, ignoring error');
+        return;
+      }
+
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       console.error('Find match error:', err, errorMessage);
 
@@ -42,7 +63,11 @@ export function useMatchmaking() {
         isRetryingRef.current = true;
         try {
           await cancelSearch();
-          setTimeout(() => doFind(true), 300);
+          // Очистить предыдущий timeout если есть
+          if (retryTimeoutRef.current) {
+            clearTimeout(retryTimeoutRef.current);
+          }
+          retryTimeoutRef.current = setTimeout(() => doFind(true), 300);
           return;
         } catch (cancelErr) {
           const cancelMessage = cancelErr instanceof Error ? cancelErr.message : 'Unknown error';
@@ -54,20 +79,31 @@ export function useMatchmaking() {
       setStatus('error');
       isRetryingRef.current = false;
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const find = useCallback(async () => {
     setStatus('searching');
     setError(null);
     isRetryingRef.current = false;
+    isCancelledRef.current = false;
     await doFind(false);
   }, [doFind]);
 
   // === Cancel Search ===
 
   const cancel = useCallback(async () => {
+    // Установить флаг отмены для предотвращения race conditions
+    isCancelledRef.current = true;
+
+    // Очистить все таймеры
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
     }
 
     try {
@@ -84,12 +120,37 @@ export function useMatchmaking() {
   // === Polling ===
 
   const startPolling = useCallback(() => {
+    // Очистить предыдущий интервал если есть (предотвращение утечки памяти)
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+
     // Polling каждые 3 сек через POST /api/pvp/find
     // Это позволяет серверу повторно искать соперника при каждом poll
     // и решает race condition когда оба игрока создали WAITING матчи одновременно
     pollIntervalRef.current = setInterval(async () => {
+      // Проверка на отмену перед polling запросом
+      if (isCancelledRef.current) {
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+        return;
+      }
+
       try {
         const response = await findMatch();
+
+        // Проверка на отмену после async операции
+        if (isCancelledRef.current) {
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+          return;
+        }
+
         console.log(`[Polling] Match ${response.match_id} status: ${response.status}`);
 
         setMatchId(response.match_id);
@@ -100,10 +161,14 @@ export function useMatchmaking() {
           setStatus('found');
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
           }
         }
       } catch (err) {
-        console.debug('Polling error:', err);
+        // Игнорируем ошибки polling если отменено
+        if (!isCancelledRef.current) {
+          console.debug('Polling error:', err);
+        }
       }
     }, 3000);
   }, []);
@@ -112,8 +177,17 @@ export function useMatchmaking() {
 
   useEffect(() => {
     return () => {
+      // Cleanup при размонтировании компонента
+      isCancelledRef.current = true;
+
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
       }
     };
   }, []);
