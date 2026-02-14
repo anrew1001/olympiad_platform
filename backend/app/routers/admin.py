@@ -6,7 +6,7 @@ import json
 import csv
 from io import StringIO
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
@@ -267,161 +267,6 @@ async def get_admin_tasks(
     )
 
 
-@router.get(
-    "/tasks/{task_id}",
-    response_model=TaskAdminResponse,
-    summary="Получить задачу по ID (Admin)",
-    description="Возвращает полную информацию о задаче ВКЛЮЧАЯ правильный ответ.",
-)
-async def get_admin_task(
-    task_id: int,
-    current_admin: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db),
-) -> Task:
-    """Получение детальной информации о задаче для администратора."""
-
-    logger.info(f"Admin task view: admin_id={current_admin.id}, task_id={task_id}")
-
-    # Используем session.get() - самый эффективный способ для PK lookup
-    task = await db.get(Task, task_id)
-
-    if task is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Задача с ID {task_id} не найдена",
-        )
-
-    return task
-
-
-@router.put(
-    "/tasks/{task_id}",
-    response_model=TaskAdminResponse,
-    summary="Обновить задачу",
-    description="Частичное или полное обновление задачи. Отправляйте только изменённые поля.",
-)
-async def update_task(
-    task_id: int,
-    task_data: TaskUpdate,
-    current_admin: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db),
-) -> Task:
-    """
-    Обновление задачи администратором.
-
-    Поддерживает частичное обновление (PATCH-like behavior):
-    - Отправляйте только те поля, которые нужно изменить
-    - Используется exclude_unset=True для игнорирования None значений
-    """
-
-    # Получение существующей задачи
-    task = await db.get(Task, task_id)
-
-    if task is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Задача с ID {task_id} не найдена",
-        )
-
-    # Логирование ПЕРЕД изменениями
-    update_data = task_data.model_dump(exclude_unset=True)
-    logger.info(
-        f"Admin task update: admin_id={current_admin.id}, "
-        f"task_id={task_id}, "
-        f"updates={update_data}"
-    )
-
-    # Применение обновлений (только переданные поля)
-    for field, value in update_data.items():
-        setattr(task, field, value)
-
-    try:
-        await db.commit()
-        await db.refresh(task)
-
-        logger.info(f"Task updated successfully: task_id={task_id}")
-
-        return task
-
-    except IntegrityError as e:
-        await db.rollback()
-        logger.error(f"Task update failed with integrity error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Не удалось обновить задачу. Проверьте корректность данных.",
-        )
-    except Exception as e:
-        await db.rollback()
-        logger.error(f"Unexpected error during task update: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Внутренняя ошибка сервера",
-        )
-
-
-@router.delete(
-    "/tasks/{task_id}",
-    response_model=dict,
-    summary="Удалить задачу",
-    description="Удаляет задачу из БД (hard delete). Требует роль администратора.",
-)
-async def delete_task(
-    task_id: int,
-    current_admin: User = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    """
-    Удаление задачи администратором.
-
-    ВНИМАНИЕ: Это HARD DELETE - задача удаляется из БД безвозвратно.
-    Для production рекомендуется использовать soft delete.
-    """
-
-    # Получение задачи
-    task = await db.get(Task, task_id)
-
-    if task is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Задача с ID {task_id} не найдена",
-        )
-
-    # Логирование ПЕРЕД удалением (warning уровень для критических операций)
-    logger.warning(
-        f"Admin task deletion: admin_id={current_admin.id}, "
-        f"task_id={task_id}, "
-        f"task_title={task.title}, "
-        f"task_subject={task.subject}, "
-        f"timestamp={datetime.utcnow().isoformat()}"
-    )
-
-    try:
-        await db.delete(task)
-        await db.commit()
-
-        logger.info(f"Task deleted successfully: task_id={task_id}")
-
-        return {"ok": True, "message": f"Задача {task_id} успешно удалена"}
-
-    except IntegrityError as e:
-        await db.rollback()
-        logger.error(f"Task deletion failed with integrity error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "Не удалось удалить задачу. "
-                "Существуют связанные записи (попытки решения пользователей)."
-            ),
-        )
-    except Exception as e:
-        await db.rollback()
-        logger.error(f"Unexpected error during task deletion: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Внутренняя ошибка сервера",
-        )
-
-
 # ===================================
 # === ИМПОРТ/ЭКСПОРТ ЗАДАЧ ===
 # ===================================
@@ -605,7 +450,8 @@ async def import_tasks(
     ),
 )
 async def export_tasks(
-    format: str = Query("json", regex="^(json|csv)$", description="Формат экспорта: json или csv"),
+    request: Request,
+    format: str = Query("json", pattern="^(json|csv)$", description="Формат экспорта: json или csv"),
     current_admin: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
@@ -618,6 +464,9 @@ async def export_tasks(
     logger.info(
         f"Admin tasks export: admin_id={current_admin.id}, format={format}"
     )
+
+    # Получить origin из request для CORS (fallback на localhost для локальной разработки)
+    origin = request.headers.get("origin", "http://localhost:3000")
 
     # Получить все задачи
     query = select(Task).order_by(Task.created_at.desc())
@@ -648,6 +497,8 @@ async def export_tasks(
             media_type="application/json; charset=utf-8",
             headers={
                 "Content-Disposition": f"attachment; filename=tasks_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json",
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Credentials": "true",
                 "Access-Control-Expose-Headers": "Content-Disposition",
             },
         )
@@ -682,8 +533,165 @@ async def export_tasks(
             media_type="text/csv; charset=utf-8",
             headers={
                 "Content-Disposition": f"attachment; filename=tasks_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv",
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Credentials": "true",
                 "Access-Control-Expose-Headers": "Content-Disposition",
             },
+        )
+
+
+@router.get(
+    "/tasks/{task_id}",
+    response_model=TaskAdminResponse,
+    summary="Получить задачу по ID (Admin)",
+    description="Возвращает полную информацию о задаче ВКЛЮЧАЯ правильный ответ.",
+)
+async def get_admin_task(
+    task_id: int,
+    current_admin: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+) -> Task:
+    """Получение детальной информации о задаче для администратора."""
+
+    logger.info(f"Admin task view: admin_id={current_admin.id}, task_id={task_id}")
+
+    # Используем session.get() - самый эффективный способ для PK lookup
+    task = await db.get(Task, task_id)
+
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Задача с ID {task_id} не найдена",
+        )
+
+    return task
+
+
+@router.put(
+    "/tasks/{task_id}",
+    response_model=TaskAdminResponse,
+    summary="Обновить задачу",
+    description="Частичное или полное обновление задачи. Отправляйте только изменённые поля.",
+)
+async def update_task(
+    task_id: int,
+    task_data: TaskUpdate,
+    current_admin: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+) -> Task:
+    """
+    Обновление задачи администратором.
+
+    Поддерживает частичное обновление (PATCH-like behavior):
+    - Отправляйте только те поля, которые нужно изменить
+    - Используется exclude_unset=True для игнорирования None значений
+    """
+
+    # Получение существующей задачи
+    task = await db.get(Task, task_id)
+
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Задача с ID {task_id} не найдена",
+        )
+
+    # Логирование ПЕРЕД изменениями
+    update_data = task_data.model_dump(exclude_unset=True)
+    logger.info(
+        f"Admin task update: admin_id={current_admin.id}, "
+        f"task_id={task_id}, "
+        f"updates={update_data}"
+    )
+
+    # Применение обновлений (только переданные поля)
+    for field, value in update_data.items():
+        setattr(task, field, value)
+
+    try:
+        await db.commit()
+        await db.refresh(task)
+
+        logger.info(f"Task updated successfully: task_id={task_id}")
+
+        return task
+
+    except IntegrityError as e:
+        await db.rollback()
+        logger.error(f"Task update failed with integrity error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Не удалось обновить задачу. Проверьте корректность данных.",
+        )
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Unexpected error during task update: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Внутренняя ошибка сервера",
+        )
+
+
+@router.delete(
+    "/tasks/{task_id}",
+    response_model=dict,
+    summary="Удалить задачу",
+    description="Удаляет задачу из БД (hard delete). Требует роль администратора.",
+)
+async def delete_task(
+    task_id: int,
+    current_admin: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Удаление задачи администратором.
+
+    ВНИМАНИЕ: Это HARD DELETE - задача удаляется из БД безвозвратно.
+    Для production рекомендуется использовать soft delete.
+    """
+
+    # Получение задачи
+    task = await db.get(Task, task_id)
+
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Задача с ID {task_id} не найдена",
+        )
+
+    # Логирование ПЕРЕД удалением (warning уровень для критических операций)
+    logger.warning(
+        f"Admin task deletion: admin_id={current_admin.id}, "
+        f"task_id={task_id}, "
+        f"task_title={task.title}, "
+        f"task_subject={task.subject}, "
+        f"timestamp={datetime.utcnow().isoformat()}"
+    )
+
+    try:
+        await db.delete(task)
+        await db.commit()
+
+        logger.info(f"Task deleted successfully: task_id={task_id}")
+
+        return {"ok": True, "message": f"Задача {task_id} успешно удалена"}
+
+    except IntegrityError as e:
+        await db.rollback()
+        logger.error(f"Task deletion failed with integrity error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Не удалось удалить задачу. "
+                "Существуют связанные записи (попытки решения пользователей)."
+            ),
+        )
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Unexpected error during task deletion: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Внутренняя ошибка сервера",
         )
 
 
