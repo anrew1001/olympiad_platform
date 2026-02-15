@@ -1,77 +1,120 @@
 # Olympiad Platform
 
-Платформа для проведения математических олимпиад с PvP режимом и системой рейтинга.
+Веб-платформа для проведения предметных олимпиад с поддержкой PvP-режима в реальном времени, системой рейтинга ELO и административной панелью управления.
 
-## Технологии
+## Описание проекта
 
-- **Backend**: Python FastAPI, PostgreSQL, SQLAlchemy
-- **Frontend**: Next.js 15, TypeScript, Tailwind CSS
-- **Deployment**: Docker, Docker Compose
+Olympiad Platform -- это клиент-серверное приложение для организации и проведения онлайн-олимпиад по математике, физике, информатике и другим дисциплинам. Платформа позволяет участникам решать задачи в режиме тренировки, соревноваться друг с другом в PvP-матчах в реальном времени через WebSocket-соединение, а также отслеживать свой прогресс через систему рейтинга и аналитику.
 
-## Быстрый старт
+### Основные возможности
 
-### Локальная разработка
+- **PvP-матчи в реальном времени** -- синхронные соревнования 1 на 1 через WebSocket с автоматическим подбором соперника, таймером и обработкой разрыва соединения
+- **Система рейтинга ELO** -- расчёт рейтинга по формуле Эло (K=32, R0=1000) с поддержкой ничьей
+- **Каталог задач** -- фильтрация по предмету, теме и сложности, автопроверка ответов
+- **Генерация вариаций задач** -- шаблонный движок с синтаксисом `{{param|min:max}}` для создания параметрических вариаций
+- **Импорт/экспорт задач** -- массовая загрузка и выгрузка задач в форматах CSV и JSON
+- **Админ-панель** -- полный CRUD задач, статистика платформы, управление контентом
+- **Аналитика и профиль** -- графики рейтинга, статистика решений, таблица лидеров, достижения
+- **Адаптивный интерфейс** -- корректное отображение на мобильных устройствах и десктопе
+
+## Стек технологий
+
+| Компонент | Технологии |
+| --- | --- |
+| **Backend** | Python 3.12, FastAPI 0.128, SQLAlchemy 2.0 (async), Pydantic 2.9 |
+| **Frontend** | Next.js 16, React 19, TypeScript 5, Tailwind CSS 4, Recharts |
+| **База данных** | PostgreSQL 16 (asyncpg) |
+| **Аутентификация** | JWT (HS256), bcrypt |
+| **Real-time** | WebSocket (нативная поддержка FastAPI) |
+| **Деплой** | Docker, Docker Compose |
+
+## Установка и развертывание
+
+### Системные требования
+
+- Docker и Docker Compose
+- Свободные порты: 3000 (frontend), 8000 (backend), 5432 (PostgreSQL)
+
+### Быстрый запуск
+
+1. Клонировать репозиторий (или скачать ZIP-архив с ветки main):
+
+   ```bash
+   git clone https://github.com/anrew1001/olympiad_platform
+   cd olympiad_platform
+   ```
+
+1. Запустить все сервисы одной командой:
+
+   ```bash
+   docker-compose -f docker-compose.prod.yml up -d
+   ```
+
+1. Дождаться сборки и инициализации (~2 минуты при первом запуске).
+
+1. Открыть в браузере: `http://localhost:3000`
+
+### Учётные данные администратора
+
+| Поле   | Значение          |
+| ------ | ----------------- |
+| Email  | `admin@gmail.com` |
+| Логин  | `admin`           |
+| Пароль | `admin123`        |
+
+### Остановка
 
 ```bash
-# Клонировать репозиторий
-git clone <repo-url>
-cd olympiad_platform
-
-# Запустить через Docker Compose
-docker-compose -f docker-compose.prod.yml up -d
+docker-compose -f docker-compose.prod.yml down
 ```
 
-**Доступ:**
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
+### Доступные сервисы
 
-**Тестовый админ:**
-- Username: `admin`
-- Password: `admin123`
-- Email: `admin@gmail.com`
-
-### Production
-
-```bash
-# С environment переменными
-docker-compose -f docker-compose.prod.yml --env-file .env.production up -d
-```
+| Сервис                       | URL                            |
+| ---------------------------- | ------------------------------ |
+| Веб-интерфейс               | `http://localhost:3000`        |
+| REST API                     | `http://localhost:8000`        |
+| Документация API (Swagger)   | `http://localhost:8000/docs`   |
 
 ## Структура проекта
 
 ```
-backend/          # FastAPI приложение
-├── app/         # Основной код
-│   ├── routers/ # API endpoints
-│   ├── models/  # Database models
-│   ├── schemas/ # Pydantic schemas
-│   └── services/# Business logic
-├── init_db.py   # Инициализация БД
-└── Dockerfile   # Backend образ
-
-frontend/        # Next.js приложение
-├── app/         # Pages (App Router)
-├── components/  # React компоненты
-└── Dockerfile   # Frontend образ
-
-data/tasks/      # Наборы задач (JSON)
+olympiad_platform/
+|
+|-- backend/                    # Серверная часть (FastAPI)
+|   |-- app/
+|   |   |-- routers/            # API-эндпоинты (admin, auth, tasks, pvp, stats)
+|   |   |-- models/             # ORM-модели (User, Task, Match, Achievement)
+|   |   |-- schemas/            # Pydantic-схемы валидации
+|   |   |-- services/           # Бизнес-логика (ELO, matchmaking, генерация задач)
+|   |   |-- websocket/          # WebSocket-менеджер и PvP-логика
+|   |   |-- dependencies/       # Middleware аутентификации и авторизации
+|   |   |-- utils/              # Вспомогательные утилиты
+|   |   |-- main.py             # Точка входа приложения
+|   |   |-- config.py           # Конфигурация
+|   |   +-- database.py         # Подключение к БД
+|   |-- init_db.py              # Инициализация БД и начальных данных
+|   |-- requirements.txt        # Python-зависимости
+|   +-- Dockerfile
+|
+|-- frontend/                   # Клиентская часть (Next.js)
+|   |-- app/                    # Страницы (App Router)
+|   |   |-- admin/              # Админ-панель
+|   |   |-- pvp/                # PvP-матчи
+|   |   |-- tasks/              # Каталог задач
+|   |   |-- profile/            # Профиль пользователя
+|   |   +-- leaderboard/        # Таблица лидеров
+|   |-- components/             # React-компоненты
+|   |-- lib/                    # API-клиенты, хуки, утилиты
+|   |-- context/                # React Context (авторизация)
+|   +-- Dockerfile
+|
+|-- data/tasks/                 # Наборы задач для инициализации (JSON)
+|-- tasks_import_example.json   # Пример файла для импорта задач
+|-- docker-compose.prod.yml     # Docker Compose конфигурация
++-- docker-compose.yml          # Docker Compose для разработки
 ```
-
-## Features
-
-- ✅ Регистрация и аутентификация
-- ✅ Каталог задач по математике
-- ✅ PvP режим (1v1 матчи)
-- ✅ Система рейтинга ELO
-- ✅ Таблица лидеров
-- ✅ Админ-панель
-- ✅ Real-time обновления (WebSocket)
 
 ## Автор
 
-Andrew Uglov
-
-## Лицензия
-
-MIT
+**Углов Андрей** (Andrew Uglov)
