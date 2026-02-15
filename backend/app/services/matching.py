@@ -45,18 +45,21 @@ async def find_or_create_match(
     Атомарный поиск или создание матча.
 
     Алгоритм:
-        1. Guard: проверяем что у пользователя нет текущего waiting/active матча.
+        1. Guard: проверяем что у пользователя нет текущего ACTIVE матча.
+           Если есть WAITING матч -- пытаемся найти соперника (решает race condition
+           когда оба игрока создают WAITING матчи одновременно).
         2. FOR UPDATE SELECT: ищем waiting-матч в диапазоне рейтингов ±200.
            Блокируем найденную строку чтобы никто другой не смог её забрать.
         3a. Если найдена строка: присваиваем player2_id, status=active, flush, выбираем задачи.
-        3b. Если строка не найдена: создаём новый Match с player1_id=user_id, status=waiting.
+        3b. Если строка не найдена: создаём новый Match с player1_id=user_id, status=waiting
+            (или возвращаем существующий WAITING если он уже есть).
 
     Возвращает:
         Match с заполненными колонками. Relationships НЕ загружены (использовался noload).
         Роутер должен после commit() сделать свежий SELECT для загрузки relationships.
 
     Raises:
-        HTTPException 409: Если пользователь уже в active/waiting матче.
+        HTTPException 409: Если пользователь уже в ACTIVE матче.
 
     НЕ вызывает commit(). Роутер ответственен за commit.
     """
@@ -67,9 +70,15 @@ async def find_or_create_match(
     # ------------------------------------------------------------------
     # Шаг 1: Guard -- пользователь уже в матче?
     # ------------------------------------------------------------------
-    logger.debug("Guard check: searching for existing match...")
     guard_stmt = (
-        select(Match.id)
+        select(Match)
+        .options(
+            noload(Match.player1),
+            noload(Match.player2),
+            noload(Match.winner),
+            noload(Match.tasks),
+            noload(Match.answers),
+        )
         .where(
             or_(
                 Match.player1_id == user_id,
@@ -78,28 +87,29 @@ async def find_or_create_match(
             Match.status.in_([MatchStatus.WAITING, MatchStatus.ACTIVE]),
         )
         .limit(1)
+        .with_for_update()
     )
     guard_result = await session.execute(guard_stmt)
-    if guard_result.scalar_one_or_none() is not None:
-        logger.debug(f"User {user_id} already in a match - 409")
-        raise HTTPException(
-            status_code=409,
-            detail="У вас уже есть активный или ожидающий матч",
+    existing_match = guard_result.scalar_one_or_none()
+
+    if existing_match is not None:
+        # ACTIVE матч -- возвращаем его (для polling - чтобы frontend увидел что матч начался)
+        if existing_match.status == MatchStatus.ACTIVE:
+            logger.info(
+                f"GUARD: user={user_id} already in ACTIVE match {existing_match.id}, returning it"
+            )
+            return existing_match
+
+        # WAITING матч -- попробуем найти соперника прямо сейчас
+        # Это решает race condition когда оба игрока создали WAITING матчи одновременно
+        logger.info(
+            f"GUARD: user={user_id} has WAITING match {existing_match.id}, "
+            f"re-searching for opponent..."
         )
-    logger.debug("Guard check passed")
 
     # ------------------------------------------------------------------
-    # Шаг 2: FOR UPDATE -- ищем waiting-матч для подбора
+    # Шаг 2: FOR UPDATE -- ищем waiting-матч другого игрока для подбора
     # ------------------------------------------------------------------
-    logger.debug("FOR UPDATE SELECT: looking for waiting match...")
-    # noload() подавляет все lazy-загрузки (joined и selectin).
-    # Без этого SQLAlchemy добавит LEFT JOIN на users (для player1, player2, winner)
-    # и отправит selectin-queries на match_tasks и match_answers.
-    # Нам не нужны эти данные здесь, и лишние JOINы мешают FOR UPDATE.
-    #
-    # Явный .join(User, ...) для фильтра по рейтингу.
-    # with_for_update(of=[Match]) -- блокирует только строку в matches,
-    # не трогает users через JOIN.
     lock_stmt = (
         select(Match)
         .options(
@@ -123,7 +133,6 @@ async def find_or_create_match(
     try:
         lock_result = await session.execute(lock_stmt)
         waiting_match = lock_result.scalar_one_or_none()
-        logger.debug(f"FOR UPDATE result: match found = {waiting_match is not None}")
     except Exception as e:
         logger.exception(f"Error executing FOR UPDATE: {e}")
         raise
@@ -132,32 +141,48 @@ async def find_or_create_match(
     # Шаг 3a: Матч найден -- забираем его
     # ------------------------------------------------------------------
     if waiting_match is not None:
+        # Если у нас был свой WAITING матч, удаляем его (мы присоединяемся к чужому)
+        if existing_match is not None:
+            await session.delete(existing_match)
+            logger.info(
+                f"MATCH MERGED: deleted own WAITING match {existing_match.id}, "
+                f"joining match {waiting_match.id}"
+            )
+
+        logger.info(
+            f"MATCH JOINED: user={user_id} joined match {waiting_match.id} as player2. "
+            f"Opponent player1={waiting_match.player1_id}"
+        )
         waiting_match.player2_id = user_id
         waiting_match.status = MatchStatus.ACTIVE
 
-        # flush: записывает изменения в БД но НЕ коммитит.
-        # Нужен потому что select_match_tasks() ниже делает INSERT в match_tasks,
-        # и ему нужен match.id (он уже есть, match существовал).
         await session.flush()
-
-        # Выбираем задачи и создаём MatchTask rows в той же транзакции
         await select_match_tasks(waiting_match.id, session)
 
         return waiting_match
 
     # ------------------------------------------------------------------
-    # Шаг 3b: Матч не найден -- создаём новый waiting-матч
+    # Шаг 3b: Нет доступного матча
     # ------------------------------------------------------------------
+    # Если у нас уже есть WAITING матч, просто возвращаем его (продолжаем ждать)
+    if existing_match is not None:
+        logger.debug(
+            f"No opponent found, returning existing WAITING match {existing_match.id}"
+        )
+        return existing_match
+
+    # Создаём новый waiting-матч
     new_match = Match(
         player1_id=user_id,
-        player2_id=None,           # явно None -- ожидает второго игрока
+        player2_id=None,
         status=MatchStatus.WAITING,
     )
     session.add(new_match)
-
-    # flush чтобы match.id был присвоен БД (autoincrement)
-    # без flush match.id == None и роутер не может его вернуть
     await session.flush()
+
+    logger.info(
+        f"MATCH CREATED: user={user_id} created new WAITING match {new_match.id}"
+    )
 
     return new_match
 
@@ -268,12 +293,19 @@ async def cancel_waiting_match(
     match = lock_result.scalar_one_or_none()
 
     if match is None:
+        logger.debug(
+            f"Cancel attempt by user {user_id}: no WAITING match found to cancel"
+        )
         return None
 
     match_id = match.id
 
     # DELETE через ORM: session.delete() безопасен.
     # Waiting-матч не имеет child rows (tasks добавляются только при переходе в active).
-    session.delete(match)
+    await session.delete(match)
+
+    logger.info(
+        f"MATCH CANCELLED: user={user_id} cancelled WAITING match {match_id}"
+    )
 
     return match_id

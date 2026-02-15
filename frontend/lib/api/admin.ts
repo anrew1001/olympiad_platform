@@ -197,3 +197,91 @@ export async function deleteTask(taskId: number): Promise<void> {
     throw new Error(error.detail || "Ошибка при удалении задачи");
   }
 }
+
+/**
+ * Импортировать задачи из файла (CSV или JSON)
+ */
+export async function importTasks(file: File): Promise<{ ok: boolean; created: number; total: number; errors?: string[] }> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${API_BASE}/api/admin/tasks/import`, {
+    method: "POST",
+    headers: {
+      ...(token && { Authorization: `Bearer ${token}` }),
+      // НЕ добавляем Content-Type - браузер сам установит multipart/form-data с boundary
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || "Ошибка при импорте задач");
+  }
+
+  return response.json();
+}
+
+/**
+ * Экспортировать задачи в файл (CSV или JSON)
+ */
+export async function exportTasks(format: "json" | "csv" = "json"): Promise<void> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+
+  const response = await fetch(`${API_BASE}/api/admin/tasks/export?format=${format}`, {
+    headers: {
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Ошибка при экспорте задач");
+  }
+
+  // Скачать файл
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+
+  // Извлечь имя файла из Content-Disposition заголовка
+  const contentDisposition = response.headers.get("Content-Disposition");
+  let filename = `tasks_export.${format}`;
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename=(.+)/);
+    if (match) {
+      filename = match[1].replace(/"/g, "");
+    }
+  }
+
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
+/**
+ * Генерировать вариации задачи
+ */
+export async function generateTaskVariations(
+  taskId: number,
+  count: number = 5
+): Promise<{ ok: boolean; count: number; task_ids: number[]; message: string }> {
+  const response = await fetch(
+    `${API_BASE}/api/admin/tasks/${taskId}/generate?count=${count}`,
+    {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || "Ошибка при генерации вариаций");
+  }
+
+  return response.json();
+}

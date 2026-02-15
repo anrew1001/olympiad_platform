@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Копируем requirements и устанавливаем зависимости в /opt/venv
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN python -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
@@ -28,8 +28,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Копируем virtualenv из builder
 COPY --from=builder /opt/venv /opt/venv
 
-# Копируем исходный код приложения
-COPY . .
+# Копируем исходный код приложения backend
+COPY backend/app ./app
+
+# Копируем данные задач
+COPY data ./data
+
+# Копируем init скрипт и entrypoint перед созданием пользователя (пока еще root)
+COPY backend/init_db.py .
+COPY backend/entrypoint.sh .
+RUN chmod +x entrypoint.sh
 
 # Создаём non-root пользователя для безопасности
 RUN useradd -m -u 1000 appuser && \
@@ -49,6 +57,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Expose порт
 EXPOSE 8000
+
+# Entrypoint для инициализации БД перед стартом
+ENTRYPOINT ["./entrypoint.sh"]
 
 # Production команда с Gunicorn + Uvicorn Workers
 # 4 workers на 4 ядрах, adjust в зависимости от ресурсов

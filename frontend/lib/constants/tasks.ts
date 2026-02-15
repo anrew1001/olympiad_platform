@@ -88,8 +88,6 @@ export const SUBJECT_OPTIONS = [
 
 export const DIFFICULTY_OPTIONS = [
   { value: "", label: "ВСЕ УРОВНИ СЛОЖНОСТИ" },
-  { value: "1", label: "◇ НОВИЧОК" },
-  { value: "2", label: "◆ УЧЕНИК" },
   { value: "3", label: "★ МАСТЕР" },
   { value: "4", label: "✦ ПРОФИ" },
   { value: "5", label: "✧ ЛЕГЕНДА" },

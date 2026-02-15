@@ -1,17 +1,22 @@
 import logging
 import os
 import sys
+import json
+from pathlib import Path
 
 # print("===== DEBUG: main.py loading =====", file=sys.stderr)
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import select, func, delete
 
-from app.database import init_db
+from app.database import init_db, async_session_maker
+from app.models import Task, Match, MatchStatus
 from app.routers import health_router, auth_router, tasks_router, users_router, admin_router, matches_router, pvp_router
 from app.websocket.pvp import router as websocket_router
 from app.routers.stats import router as stats_router
+from datetime import datetime, timedelta
 
 # print("===== DEBUG: imports done =====", file=sys.stderr)
 
@@ -69,21 +74,138 @@ async def log_requests(request: Request, call_next):
         raise
 
 
+async def load_tasks_from_json() -> None:
+    """Загружает задачи из JSON файла если БД пуста. Использует титл как уникальный ключ."""
+    try:
+        async with async_session_maker() as session:
+            # Проверяем нужна ли загрузка - если все 60 уникальных задач уже есть, пропускаем
+            result = await session.execute(select(func.count(Task.title.distinct())))
+            unique_count = result.scalar() or 0
+
+            if unique_count >= 60:
+                # Если есть дубли, удаляем их
+                if unique_count > 60:
+                    # Удаляем дубли - оставляем только первую копию каждого заголовка
+                    await session.execute("""
+                        DELETE FROM tasks WHERE id NOT IN (
+                            SELECT MIN(id) FROM tasks GROUP BY title
+                        )
+                    """)
+                    await session.commit()
+                    logger.info(f"✓ Удалены дубли, осталось 60 задач")
+                return
+
+            # Ищем JSON файл в /app/data/tasks/grade10_mix.json
+            json_path = Path(__file__).parent.parent / "data" / "tasks" / "grade10_mix.json"
+
+            if not json_path.exists():
+                logger.warning(f"⚠ Файл задач не найден: {json_path}")
+                return
+
+            # Загружаем JSON
+            with open(json_path, 'r', encoding='utf-8') as f:
+                tasks_data = json.load(f)
+
+            # Добавляем все задачи
+            tasks = []
+            for task_data in tasks_data:
+                task = Task(
+                    subject=task_data.get("subject"),
+                    topic=task_data.get("topic"),
+                    difficulty=task_data.get("difficulty"),
+                    title=task_data.get("title"),
+                    text=task_data.get("text"),
+                    answer=task_data.get("answer"),
+                    hints=task_data.get("hints", [])
+                )
+                tasks.append(task)
+
+            session.add_all(tasks)
+            await session.commit()
+            logger.info(f"✓ Загружено {len(tasks)} задач из {json_path.name}")
+
+            # Сразу же удаляем дубли если они появились от параллельных workers
+            result = await session.execute(select(func.count(Task.id)))
+            total = result.scalar() or 0
+            if total > 60:
+                # Получаем все задачи и находим дубли
+                result = await session.execute(select(Task).order_by(Task.title, Task.id))
+                all_tasks = result.scalars().all()
+
+                titles_seen = set()
+                ids_to_delete = []
+                for task in all_tasks:
+                    if task.title in titles_seen:
+                        ids_to_delete.append(task.id)
+                    else:
+                        titles_seen.add(task.title)
+
+                if ids_to_delete:
+                    await session.execute(delete(Task).where(Task.id.in_(ids_to_delete)))
+                    await session.commit()
+                    logger.info(f"✓ Удалены {len(ids_to_delete)} дубли от параллельных workers")
+
+    except Exception as e:
+        logger.warning(f"⚠ Ошибка загрузки задач из JSON: {e}")
+
+
 # Event handler при старте приложения
 @app.on_event("startup")
 async def startup_event() -> None:
     """
     Инициализирует базу данных при старте приложения.
-    Создает все необходимые таблицы.
+    Создает все необходимые таблицы и загружает задачи из JSON.
     Ошибки подключения логируются, приложение продолжает работу.
     """
     try:
         await init_db()
         logger.info("✓ База данных инициализирована успешно")
     except ConnectionRefusedError:
-        logger.warning("⚠ PostgreSQL недоступен на localhost:5432. Проверьте подключение.")
+        logger.warning("⚠ PostgreSQL недоступен. Проверьте подключение.")
+        return
     except Exception as e:
-        logger.warning(f"⚠ Ошибка инициализации БД: {e}")
+        # Игнорируем ошибки вроде duplicate key при параллельной инициализации
+        if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
+            logger.info("✓ База данных уже инициализирована")
+        else:
+            logger.warning(f"⚠ Ошибка инициализации БД: {e}")
+
+    # Задачи загружаются init_db.py перед стартом, поэтому здесь не нужно
+
+    # Очистка orphaned матчей при старте
+    # Примечание: этот код может не выполниться если БД еще не готова,
+    # но это не критично, т.к. cleanup также происходит при disconnect
+    try:
+        # Даем БД немного времени стабилизироваться после init_db
+        import asyncio
+        await asyncio.sleep(1)
+
+        async with async_session_maker() as session:
+            # Находим все WAITING матчи без второго игрока (старше 5 минут)
+            cutoff_time = datetime.utcnow() - timedelta(minutes=5)
+
+            result = await session.execute(
+                select(Match)
+                .where(
+                    Match.status == MatchStatus.WAITING,
+                    Match.player2_id.is_(None),
+                    Match.created_at < cutoff_time
+                )
+            )
+            orphaned = result.scalars().all()
+
+            if orphaned:
+                for match in orphaned:
+                    await session.delete(match)  # AsyncSession.delete() IS async!
+                await session.commit()
+                logger.info(f"✓ Cleaned {len(orphaned)} orphaned matches on startup")
+            else:
+                logger.info("✓ No orphaned matches found on startup")
+    except ConnectionRefusedError:
+        logger.info("⏳ БД еще не готова для cleanup, пропускаем")
+    except Exception as e:
+        # Не критичная ошибка - cleanup также происходит при disconnect
+        logger.info(f"⏳ Startup cleanup пропущен: {type(e).__name__}")
 
 
 # Подключение роутеров к приложению
