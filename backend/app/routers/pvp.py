@@ -73,24 +73,36 @@ async def find_match(
     await db.commit()
 
     # После commit: свежий SELECT с eager loading relationships
+    # populate_existing=True заставляет SQLAlchemy перезагрузить объект из БД,
+    # даже если он уже в session (с noload() из matching service)
     result = await db.execute(
         select(Match)
         .where(Match.id == match_id)
         .options(joinedload(Match.player1), joinedload(Match.player2))
+        .execution_options(populate_existing=True)
     )
-    match = result.scalar_one()  # Убрали unique() - оно ломает joinedload
+    match = result.unique().scalar_one()
 
-    # Построение response: opponent зависит от статуса
+    # Построение response: opponent зависит от статуса и позиции игрока
     opponent = None
     if match.status == MatchStatus.ACTIVE:
-        # Мы присоединились к матчу → мы player2, opponent = player1
-        # Проверяем что player1 загружен
-        if match.player1:
-            opponent = OpponentInfo(
-                id=match.player1.id,
-                username=match.player1.username,
-                rating=match.player1.rating,
-            )
+        # Определяем кто мы и кто opponent
+        if current_user.id == match.player1_id:
+            # Мы player1, opponent = player2
+            if match.player2 is not None:
+                opponent = OpponentInfo(
+                    id=match.player2.id,
+                    username=match.player2.username,
+                    rating=match.player2.rating,
+                )
+        else:
+            # Мы player2, opponent = player1
+            if match.player1 is not None:
+                opponent = OpponentInfo(
+                    id=match.player1.id,
+                    username=match.player1.username,
+                    rating=match.player1.rating,
+                )
 
     return MatchResponse(
         match_id=match.id,
@@ -115,10 +127,22 @@ async def cancel_find(
 
     Удаляет waiting-матч. Если пользователь не создал waiting-матч или
     его уже забрал другой игрок -- возвращает {"cancelled": false}.
+
+    Также очищает WebSocket state в ConnectionManager для этого матча.
     """
     match_id = await cancel_waiting_match(user_id=current_user.id, session=db)
 
     await db.commit()
+
+    # Cleanup WebSocket state if match was cancelled
+    if match_id is not None:
+        # Disconnect user from ConnectionManager if still connected
+        if manager.is_connected(match_id, current_user.id):
+            await manager.disconnect(match_id, current_user.id)
+            logger.info(
+                f"Cleaned up WebSocket state for user {current_user.id} "
+                f"from cancelled match {match_id}"
+            )
 
     return CancelResponse(cancelled=match_id is not None)
 

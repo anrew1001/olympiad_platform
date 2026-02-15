@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,11 +15,15 @@ import {
   createTask,
   updateTask,
   deleteTask,
+  importTasks,
+  exportTasks,
+  generateTaskVariations,
   type AdminPaginatedTasks,
   type TaskAdmin,
   type TaskCreate,
   type TaskUpdate,
 } from "@/lib/api/admin";
+import { SUBJECT_LABELS } from "@/lib/constants/tasks";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 
 export default function AdminTasksPage() {
@@ -37,6 +41,11 @@ export default function AdminTasksPage() {
 
   // Пагинация
   const [page, setPage] = useState(1);
+
+  // Импорт/Экспорт
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
 
   // Редирект если не админ
   useEffect(() => {
@@ -118,6 +127,61 @@ export default function AdminTasksPage() {
     }
   };
 
+  // Импорт задач
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImportLoading(true);
+    setImportResult(null);
+
+    try {
+      const result = await importTasks(file);
+      setImportResult(
+        `✓ Успешно импортировано: ${result.created} из ${result.total} задач` +
+        (result.errors && result.errors.length > 0 ? `\n\nОшибки:\n${result.errors.join('\n')}` : '')
+      );
+      await loadTasks();
+    } catch (err) {
+      setImportResult(`✗ Ошибка: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}`);
+    } finally {
+      setImportLoading(false);
+      // Очистить input чтобы можно было загрузить тот же файл снова
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Экспорт задач
+  const handleExport = async (format: 'json' | 'csv') => {
+    try {
+      await exportTasks(format);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Ошибка экспорта');
+    }
+  };
+
+  // Генерация вариаций
+  const handleGenerate = async (taskId: number, title: string) => {
+    const countStr = prompt(`Сколько вариаций задачи "${title}" создать? (1-20)`, '5');
+    if (!countStr) return;
+
+    const count = parseInt(countStr);
+    if (isNaN(count) || count < 1 || count > 20) {
+      alert('Введите число от 1 до 20');
+      return;
+    }
+
+    try {
+      const result = await generateTaskVariations(taskId, count);
+      setImportResult(`✓ ${result.message}\nСозданы задачи с ID: ${result.task_ids.join(', ')}`);
+      await loadTasks();
+    } catch (err) {
+      setImportResult(`✗ Ошибка: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}`);
+    }
+  };
+
   if (authLoading) {
     return <LoadingScreen text="ПРОВЕРКА ДОСТУПА..." />;
   }
@@ -154,19 +218,62 @@ export default function AdminTasksPage() {
             </p>
           </div>
 
-          <button
-            onClick={() => {
-              setEditingTask(null);
-              setShowForm(true);
-            }}
-            className="px-6 py-3 bg-[#0066FF] text-white font-mono text-sm font-bold hover:bg-[#0080FF] transition-all"
-            style={{
-              clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
-              boxShadow: '0 0 15px rgba(0, 102, 255, 0.5)',
-            }}
-          >
-            + СОЗДАТЬ ЗАДАЧУ
-          </button>
+          <div className="flex gap-3">
+            {/* Кнопки импорта/экспорта */}
+            <div className="flex gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,.csv"
+                onChange={handleImport}
+                className="hidden"
+                id="import-file"
+              />
+              <label
+                htmlFor="import-file"
+                className={`px-4 py-3 bg-[#1a1a1a] border border-[#333] text-white font-mono text-xs hover:border-[#0066FF] transition-all cursor-pointer ${importLoading ? 'opacity-50' : ''}`}
+                style={{
+                  clipPath: 'polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px))',
+                }}
+              >
+                {importLoading ? '⏳ ИМПОРТ...' : '↑ ИМПОРТ'}
+              </label>
+
+              <button
+                onClick={() => handleExport('json')}
+                className="px-4 py-3 bg-[#1a1a1a] border border-[#333] text-white font-mono text-xs hover:border-[#0066FF] transition-all"
+                style={{
+                  clipPath: 'polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px))',
+                }}
+              >
+                ↓ JSON
+              </button>
+
+              <button
+                onClick={() => handleExport('csv')}
+                className="px-4 py-3 bg-[#1a1a1a] border border-[#333] text-white font-mono text-xs hover:border-[#0066FF] transition-all"
+                style={{
+                  clipPath: 'polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px))',
+                }}
+              >
+                ↓ CSV
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                setEditingTask(null);
+                setShowForm(true);
+              }}
+              className="px-6 py-3 bg-[#0066FF] text-white font-mono text-sm font-bold hover:bg-[#0080FF] transition-all"
+              style={{
+                clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+                boxShadow: '0 0 15px rgba(0, 102, 255, 0.5)',
+              }}
+            >
+              + СОЗДАТЬ ЗАДАЧУ
+            </button>
+          </div>
         </div>
 
         {/* Форма */}
@@ -180,6 +287,26 @@ export default function AdminTasksPage() {
             }}
             loading={formLoading}
           />
+        )}
+
+        {/* Результат импорта */}
+        {importResult && (
+          <div
+            className={`relative mb-6 p-4 border ${importResult.startsWith('✓') ? 'border-[#00ff41] bg-[#0a1a0a]' : 'border-[#ff3b30] bg-[#1a0a0a]'}`}
+            style={{
+              clipPath: 'polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px)',
+            }}
+          >
+            <button
+              onClick={() => setImportResult(null)}
+              className="absolute top-2 right-2 text-gray-500 hover:text-white font-mono text-xs"
+            >
+              ✕
+            </button>
+            <pre className={`text-xs font-mono whitespace-pre-wrap ${importResult.startsWith('✓') ? 'text-[#00ff41]' : 'text-[#ff3b30]'}`}>
+              {importResult}
+            </pre>
+          </div>
         )}
 
         {/* Ошибка */}
@@ -223,6 +350,7 @@ export default function AdminTasksPage() {
                     setShowForm(true);
                   }}
                   onDelete={() => handleDelete(task.id, task.title)}
+                  onGenerate={() => handleGenerate(task.id, task.title)}
                 />
               ))}
             </div>
@@ -272,9 +400,10 @@ interface TaskCardProps {
   task: TaskAdmin;
   onEdit: () => void;
   onDelete: () => void;
+  onGenerate: () => void;
 }
 
-function TaskCard({ task, onEdit, onDelete }: TaskCardProps) {
+function TaskCard({ task, onEdit, onDelete, onGenerate }: TaskCardProps) {
   const difficultyColors = ["#666", "#00ff88", "#ffcc00", "#ff9900", "#ff3b30"];
   const color = difficultyColors[task.difficulty - 1] || "#666";
 
@@ -306,7 +435,7 @@ function TaskCard({ task, onEdit, onDelete }: TaskCardProps) {
                 clipPath: 'polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 4px 100%, 0 calc(100% - 4px))',
               }}
             >
-              {task.subject}
+              {SUBJECT_LABELS[task.subject as keyof typeof SUBJECT_LABELS] || task.subject}
             </span>
             <span className="text-[10px] font-mono text-gray-600 uppercase">{task.topic}</span>
             <span className="text-[10px] font-mono font-bold" style={{ color }}>
@@ -322,6 +451,16 @@ function TaskCard({ task, onEdit, onDelete }: TaskCardProps) {
         </div>
 
         <div className="flex gap-2">
+          <button
+            onClick={onGenerate}
+            className="px-4 py-2 bg-[#1a1a1a] border border-[#00ff88]/40 text-[#00ff88] font-mono text-xs hover:border-[#00ff88] transition-all"
+            style={{
+              clipPath: 'polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px))',
+            }}
+            title="Генерировать вариации на основе шаблонов"
+          >
+            ГЕН
+          </button>
           <button
             onClick={onEdit}
             className="px-4 py-2 bg-[#1a1a1a] border border-[#0066FF]/40 text-[#0066FF] font-mono text-xs hover:border-[#0066FF] transition-all"

@@ -2,8 +2,12 @@ import logging
 from datetime import datetime
 from math import ceil
 from typing import Optional
+import json
+import csv
+from io import StringIO
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +22,11 @@ from app.schemas.task import (
     TaskAdminResponse,
     AdminPaginatedTaskResponse,
 )
+from app.services.task_generator import TaskGenerator
 
+
+# Максимальный размер файла для импорта (10MB)
+MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024
 
 # Логирование для audit trail
 logger = logging.getLogger(__name__)
@@ -259,6 +267,279 @@ async def get_admin_tasks(
     )
 
 
+# ===================================
+# === ИМПОРТ/ЭКСПОРТ ЗАДАЧ ===
+# ===================================
+
+
+@router.post(
+    "/tasks/import",
+    summary="Импорт задач из CSV/JSON",
+    description=(
+        "Массовая загрузка задач из CSV или JSON файла. "
+        "Требует роль администратора. "
+        "Поддерживает форматы: application/json, text/csv"
+    ),
+)
+async def import_tasks(
+    file: UploadFile = File(...),
+    current_admin: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Импорт задач из CSV или JSON файла.
+
+    JSON формат:
+    [
+        {
+            "subject": "математика",
+            "topic": "алгебра",
+            "difficulty": 3,
+            "title": "Уравнение",
+            "text": "Решите уравнение...",
+            "answer": "42",
+            "hints": ["подсказка 1", "подсказка 2"]
+        },
+        ...
+    ]
+
+    CSV формат (с заголовками):
+    subject,topic,difficulty,title,text,answer,hints
+    математика,алгебра,3,"Уравнение","Решите...","42","подсказка 1;подсказка 2"
+
+    Hints в CSV разделяются точкой с запятой (;)
+    """
+
+    logger.info(
+        f"Admin tasks import: admin_id={current_admin.id}, "
+        f"filename={file.filename}, "
+        f"content_type={file.content_type}"
+    )
+
+    content = await file.read()
+
+    # Проверка размера файла
+    if len(content) > MAX_IMPORT_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Файл слишком большой. Максимальный размер: {MAX_IMPORT_FILE_SIZE / 1024 / 1024:.0f}MB"
+        )
+
+    content_str = content.decode("utf-8")
+
+    tasks_data = []
+
+    try:
+        # Определяем формат по content_type или расширению
+        is_json = (
+            file.content_type == "application/json"
+            or (file.filename and file.filename.endswith(".json"))
+        )
+        is_csv = (
+            file.content_type in ["text/csv", "application/csv"]
+            or (file.filename and file.filename.endswith(".csv"))
+        )
+
+        if is_json:
+            # Парсинг JSON
+            data = json.loads(content_str)
+            if not isinstance(data, list):
+                raise ValueError("JSON должен содержать массив объектов задач")
+            tasks_data = data
+
+        elif is_csv:
+            # Парсинг CSV
+            csv_file = StringIO(content_str)
+            reader = csv.DictReader(csv_file)
+
+            for row in reader:
+                # Обработка hints (разделённые точкой с запятой)
+                hints_str = row.get("hints", "")
+                hints = [h.strip() for h in hints_str.split(";") if h.strip()] if hints_str else []
+
+                task_dict = {
+                    "subject": row["subject"],
+                    "topic": row["topic"],
+                    "difficulty": int(row["difficulty"]),
+                    "title": row["title"],
+                    "text": row["text"],
+                    "answer": row["answer"],
+                    "hints": hints,
+                }
+                tasks_data.append(task_dict)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Неподдерживаемый формат файла. Используйте JSON или CSV.",
+            )
+
+        # Валидация и создание задач
+        created_count = 0
+        errors = []
+
+        for idx, task_data in enumerate(tasks_data):
+            try:
+                # Валидация через Pydantic схему
+                validated_task = TaskCreate(**task_data)
+
+                # Создание задачи
+                new_task = Task(
+                    subject=validated_task.subject,
+                    topic=validated_task.topic,
+                    difficulty=validated_task.difficulty,
+                    title=validated_task.title,
+                    text=validated_task.text,
+                    answer=validated_task.answer,
+                    hints=validated_task.hints,
+                )
+
+                db.add(new_task)
+                created_count += 1
+
+            except Exception as e:
+                errors.append(f"Строка {idx + 1}: {str(e)}")
+                logger.warning(f"Failed to import task at index {idx}: {e}")
+
+        # Проверить наличие ошибок ПЕРЕД коммитом
+        if errors:
+            await db.rollback()
+            logger.error(
+                f"Tasks import failed: {len(errors)} validation errors out of {len(tasks_data)}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Импорт провален: {len(errors)} ошибок валидации. Первая ошибка: {errors[0]}"
+            )
+
+        # Коммит только если НЕТ ошибок
+        await db.commit()
+
+        logger.info(
+            f"Tasks import completed successfully: created={created_count}, total={len(tasks_data)}"
+        )
+
+        return {
+            "ok": True,
+            "created": created_count,
+            "total": len(tasks_data),
+            "errors": None,
+        }
+
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parse error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ошибка парсинга JSON: {str(e)}",
+        )
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Unexpected error during import: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка импорта: {str(e)}",
+        )
+
+
+@router.get(
+    "/tasks/export",
+    summary="Экспорт задач в CSV/JSON",
+    description=(
+        "Скачать все задачи в формате CSV или JSON. "
+        "Требует роль администратора. "
+        "Параметр format: json (по умолчанию) или csv"
+    ),
+)
+async def export_tasks(
+    request: Request,
+    format: str = Query("json", pattern="^(json|csv)$", description="Формат экспорта: json или csv"),
+    current_admin: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """
+    Экспорт всех задач в JSON или CSV формате.
+
+    Включает все поля задачи, включая answer (для админов).
+    """
+
+    logger.info(
+        f"Admin tasks export: admin_id={current_admin.id}, format={format}"
+    )
+
+    # Получить origin из request для CORS (fallback на localhost для локальной разработки)
+    origin = request.headers.get("origin", "http://localhost:3000")
+
+    # Получить все задачи
+    query = select(Task).order_by(Task.created_at.desc())
+    result = await db.execute(query)
+    tasks = result.scalars().all()
+
+    if format == "json":
+        # JSON экспорт
+        tasks_data = [
+            {
+                "id": task.id,
+                "subject": task.subject,
+                "topic": task.topic,
+                "difficulty": task.difficulty,
+                "title": task.title,
+                "text": task.text,
+                "answer": task.answer,
+                "hints": task.hints,
+                "created_at": task.created_at.isoformat() if task.created_at else None,
+            }
+            for task in tasks
+        ]
+
+        json_content = json.dumps(tasks_data, ensure_ascii=False, indent=2)
+
+        return StreamingResponse(
+            iter([json_content]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename=tasks_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json",
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Expose-Headers": "Content-Disposition",
+            },
+        )
+
+    else:  # format == "csv"
+        # CSV экспорт
+        output = StringIO()
+        fieldnames = ["id", "subject", "topic", "difficulty", "title", "text", "answer", "hints", "created_at"]
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+
+        writer.writeheader()
+        for task in tasks:
+            # Hints в CSV соединяем точкой с запятой
+            hints_str = ";".join(task.hints) if task.hints else ""
+
+            writer.writerow({
+                "id": task.id,
+                "subject": task.subject,
+                "topic": task.topic,
+                "difficulty": task.difficulty,
+                "title": task.title,
+                "text": task.text,
+                "answer": task.answer,
+                "hints": hints_str,
+                "created_at": task.created_at.isoformat() if task.created_at else "",
+            })
+
+        csv_content = output.getvalue()
+
+        return StreamingResponse(
+            iter([csv_content]),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename=tasks_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv",
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Expose-Headers": "Content-Disposition",
+            },
+        )
+
+
 @router.get(
     "/tasks/{task_id}",
     response_model=TaskAdminResponse,
@@ -411,4 +692,126 @@ async def delete_task(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Внутренняя ошибка сервера",
+        )
+
+
+# ===================================
+# === ГЕНЕРАЦИЯ ВАРИАЦИЙ ЗАДАЧ ===
+# ===================================
+
+
+@router.post(
+    "/tasks/{task_id}/generate",
+    summary="Генерация вариаций задачи",
+    description=(
+        "Генерирует вариации задачи на основе параметров. "
+        "Требует роль администратора. "
+        "Использует шаблоны вида {{param|min:max}} в тексте задачи."
+    ),
+)
+async def generate_task_variations(
+    task_id: int,
+    count: int = Query(5, ge=1, le=20, description="Количество вариаций (1-20)"),
+    current_admin: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Генерирует вариации существующей задачи.
+
+    Преобразует задачу в шаблон (если содержит числа) и генерирует вариации
+    с случайными параметрами.
+
+    Шаблонный синтаксис:
+    - {{param|min:max}} - случайное целое число от min до max
+    - {{eval:expression}} - вычисление выражения для answer
+
+    Пример:
+    Исходная задача: "Решите уравнение: 3x + 5 = 20"
+    Шаблон: "Решите уравнение: {{a|2:10}}x + {{b|5:20}} = {{c|25:60}}"
+    Ответ: "{{eval:(c-b)/a}}"
+    """
+
+    logger.info(
+        f"Admin task variations generation: admin_id={current_admin.id}, "
+        f"task_id={task_id}, count={count}"
+    )
+
+    # Получить исходную задачу
+    task = await db.get(Task, task_id)
+
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Задача с ID {task_id} не найдена",
+        )
+
+    # Создать шаблон из задачи
+    template = {
+        "subject": task.subject,
+        "topic": task.topic,
+        "difficulty": task.difficulty,
+        "title": task.title,
+        "text": task.text,
+        "answer": task.answer,
+        "hints": task.hints or [],
+    }
+
+    try:
+        # Валидация шаблона
+        if not TaskGenerator.validate_template(template):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Задача не содержит шаблонных параметров. "
+                    "Используйте синтаксис {{param|min:max}} для создания вариаций."
+                ),
+            )
+
+        # Генерация вариаций
+        variations = TaskGenerator.generate_multiple(template, count=count)
+
+        # Сохранение вариаций в БД
+        created_tasks = []
+        for idx, variation in enumerate(variations):
+            new_task = Task(
+                subject=variation["subject"],
+                topic=variation["topic"],
+                difficulty=variation["difficulty"],
+                title=f"{variation['title']} (вариация {idx + 1})",
+                text=variation["text"],
+                answer=variation["answer"],
+                hints=variation["hints"],
+            )
+            db.add(new_task)
+            created_tasks.append(new_task)
+
+        await db.commit()
+
+        # Обновить created_tasks с ID
+        for task in created_tasks:
+            await db.refresh(task)
+
+        logger.info(
+            f"Generated {len(created_tasks)} variations for task {task_id}"
+        )
+
+        return {
+            "ok": True,
+            "count": len(created_tasks),
+            "task_ids": [t.id for t in created_tasks],
+            "message": f"Создано {len(created_tasks)} вариаций задачи",
+        }
+
+    except ValueError as e:
+        logger.error(f"Template validation failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Unexpected error during generation: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка генерации: {str(e)}",
         )

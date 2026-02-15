@@ -184,6 +184,74 @@ async def load_match_with_tasks(
     return match, tasks_info
 
 
+async def cleanup_orphaned_match(
+    match_id: int,
+    user_id: int,
+    session: AsyncSession,
+) -> bool:
+    """
+    Cleans up orphaned WAITING match when creator disconnects.
+
+    Only deletes matches that are:
+    - Status: WAITING
+    - player1_id == user_id (disconnecting user created it)
+    - player2_id IS NULL (no one joined)
+
+    Args:
+        match_id: ID of the match
+        user_id: ID of user who disconnected
+        session: AsyncSession for DB operations
+
+    Returns:
+        True if match was cleaned up, False otherwise
+    """
+    try:
+        # Lock and load match
+        result = await session.execute(
+            select(Match)
+            .where(Match.id == match_id)
+            .options(
+                noload(Match.player1),
+                noload(Match.player2),
+                noload(Match.winner),
+                noload(Match.tasks),
+                noload(Match.answers),
+            )
+            .with_for_update()
+        )
+        match = result.scalar_one_or_none()
+
+        if not match:
+            logger.debug(f"Match {match_id} not found for cleanup")
+            return False
+
+        # Only cleanup WAITING matches where user is player1 and player2 never joined
+        if (
+            match.status == MatchStatus.WAITING
+            and match.player1_id == user_id
+            and match.player2_id is None
+        ):
+            # Delete the match
+            await session.delete(match)  # AsyncSession.delete() IS async!
+            await session.commit()
+            logger.info(
+                f"Cleaned up orphaned WAITING match {match_id} "
+                f"after player1 {user_id} disconnected before anyone joined"
+            )
+            return True
+
+        logger.debug(
+            f"Match {match_id} not cleaned: status={match.status.value}, "
+            f"player1={match.player1_id}, player2={match.player2_id}"
+        )
+        return False
+
+    except Exception as e:
+        logger.error(f"Error cleaning up orphaned match {match_id}: {e}", exc_info=True)
+        await session.rollback()
+        return False
+
+
 async def handle_message(
     match_id: int,
     user_id: int,
@@ -612,8 +680,19 @@ async def websocket_endpoint(
 
         # 6. If both connected -> activate match and send match_start to both
         if manager.is_both_connected(match_id):
-            # Load tasks
-            _, tasks_info = await load_match_with_tasks(match_id, async_session_maker())
+            # Load tasks and activate match
+            async with async_session_maker() as session:
+                try:
+                    # Load tasks
+                    _, tasks_info = await load_match_with_tasks(match_id, session)
+
+                    # Activate match (WAITING -> ACTIVE)
+                    await activate_match(match_id, session)
+                    await session.commit()
+                except Exception as e:
+                    logger.error(f"Error activating match {match_id}: {e}")
+                    await session.rollback()
+                    raise
 
             match_start_event = MatchStartEvent(tasks=tasks_info)
 
@@ -621,14 +700,6 @@ async def websocket_endpoint(
                 match_id,
                 match_start_event.model_dump(),
             )
-
-            # Activate match (WAITING -> ACTIVE)
-            async with async_session_maker() as session:
-                try:
-                    await activate_match(match_id, session)
-                    await session.commit()
-                except Exception as e:
-                    logger.error(f"Error activating match {match_id}: {e}")
 
             logger.info(f"Match {match_id} started (both players connected)")
 
@@ -670,10 +741,36 @@ async def websocket_endpoint(
             if match:
                 opponent_id = manager.get_opponent_id(match_id, user.id)
 
-                # Opponent никогда не подключался - просто cleanup, не technical error
+                # Opponent никогда не подключался - cleanup WebSocket and orphaned match
                 if opponent_id is None:
-                    logger.info(f"User {user.id} disconnected from match {match_id}, opponent never connected")
+                    logger.info(
+                        f"User {user.id} disconnected from match {match_id}, "
+                        f"opponent never connected - attempting orphaned match cleanup"
+                    )
                     manager.disconnect(match_id, user.id)
+
+                    # Cleanup orphaned WAITING match from database
+                    # Используем глобальный импорт async_session_maker (строка 14)
+                    async with async_session_maker() as session:
+                        try:
+                            was_cleaned = await cleanup_orphaned_match(
+                                match_id, user.id, session
+                            )
+                            if was_cleaned:
+                                logger.info(
+                                    f"Successfully cleaned up orphaned match {match_id} "
+                                    f"for user {user.id}"
+                                )
+                            else:
+                                logger.debug(
+                                    f"No cleanup needed for match {match_id} "
+                                    f"(may have been joined or already cleaned)"
+                                )
+                        except Exception as e:
+                            logger.error(
+                                f"Error during orphaned match cleanup for match {match_id}: {e}",
+                                exc_info=True
+                            )
 
                 # Opponent подключался - проверяем всё ли ещё подключён
                 elif manager.is_connected(match_id, opponent_id):
@@ -690,38 +787,40 @@ async def websocket_endpoint(
                         f"(flapping={is_flapping}, original={settings.DISCONNECT_TIMEOUT_SECONDS}s)"
                     )
 
-                    # Define timeout callback for forfeit
+                    # Define timeout callback for technical error (no rating change per spec)
                     async def disconnect_timeout_callback():
                         async with async_session_maker() as session:
                             try:
                                 logger.warning(
                                     f"Disconnect timeout expired for user {user.id} in match {match_id}. "
-                                    f"Finalizing as forfeit."
+                                    f"Finalizing as technical_error (no rating change per spec)."
                                 )
-                                result_data = await finalize_match_forfeit(
-                                    match_id, user.id, session
+                                await handle_technical_error(
+                                    match_id,
+                                    session,
+                                    f"Player {user.id} disconnected and failed to reconnect within timeout"
                                 )
                                 await session.commit()
 
-                                # Send match_end to remaining player
+                                # Send match_end to remaining player with no rating changes
                                 await manager.send_personal(
                                     match_id,
                                     opponent_id,
                                     MatchEndEvent(
-                                        reason="forfeit",
-                                        winner_id=result_data["winner_id"],
-                                        player1_rating_change=result_data["player1_rating_change"],
-                                        player1_new_rating=result_data["player1_new_rating"],
-                                        player2_rating_change=result_data["player2_rating_change"],
-                                        player2_new_rating=result_data["player2_new_rating"],
+                                        reason="technical_error",
+                                        winner_id=None,
+                                        player1_rating_change=0,
+                                        player1_new_rating=0,
+                                        player2_rating_change=0,
+                                        player2_new_rating=0,
                                         final_scores={
-                                            "player1_score": result_data["final_scores"]["player1_score"],
-                                            "player2_score": result_data["final_scores"]["player2_score"],
+                                            "player1_score": 0,
+                                            "player2_score": 0,
                                         },
                                     ).model_dump(),
                                 )
 
-                                logger.info(f"Forfeit match {match_id}: player {opponent_id} wins")
+                                logger.info(f"Technical error in match {match_id}: no rating changes applied")
                             except Exception as e:
                                 logger.error(f"Error in disconnect timeout: {e}")
 

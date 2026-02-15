@@ -56,7 +56,7 @@ async def create_admin_user():
         print("✅ Админ пользователь создан!")
         print(f"   Username: admin")
         print(f"   Password: admin123")
-        print(f"   Email: admin@olympiad.local")
+        print(f"   Email: admin@gmail.com")
         print(f"   ID: {admin.id}")
         print("")
         print("⚠️  ВАЖНО: Смените пароль после первого входа!")
