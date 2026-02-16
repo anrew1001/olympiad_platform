@@ -68,6 +68,7 @@ Olympiad Platform -- это клиент-серверное приложение
 docker-compose -f docker-compose.prod.yml down
 ```
 
+
 ### Доступные сервисы
 
 | Сервис                       | URL                            |
